@@ -16,7 +16,7 @@
     </control>
     <control type="image">
       <left>1168</left><top>732</top><width>320</width><height>180</height>
-      <aspectratio>scale</aspectratio><fadetime>200</fadetime>
+      <aspectratio scalediffuse="false">scale</aspectratio><fadetime>200</fadetime>
       <texture diffuse="mask_wide.png">$INFO[Window.Property(silo.next_thumb)]</texture>
     </control>
     <control type="label">

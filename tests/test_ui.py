@@ -77,6 +77,20 @@ class ApplicationFlowTests(unittest.TestCase):
         self.app.profile = {}
         self.app.profile_avatar = ""
 
+    def test_unexpected_errors_log_where_they_happened_but_never_their_text(self):
+        log = KODI_MODULES["xbmc"].log
+        log.reset_mock()
+
+        def fail():
+            raise KeyError("https://example.invalid/signed?token=secret")
+
+        self.assertIsNone(self.app.guard(fail))
+        text = log.call_args.args[0]
+        self.assertTrue(text.startswith("[Silo] Unexpected window action error: KeyError at application.py:"), text)
+        self.assertIn(" in guard", text)
+        self.assertNotIn("secret", text)
+        self.app.dialog.ok.assert_called_with("Silo", "This action could not be completed.")
+
     def test_pin_refusal_attempts_once_and_never_selects_profile(self):
         self.app.client.profiles.return_value = {"items": [{"id": "locked", "name": "Adult", "has_pin": True}]}
         self.app.dialog.input.return_value = "1234"

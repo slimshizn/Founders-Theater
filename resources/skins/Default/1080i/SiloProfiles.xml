@@ -24,7 +24,7 @@
       <itemlayout width="284" height="390">
         <control type="image"><left>32</left><top>32</top><width>220</width><height>220</height><texture colordiffuse="FF15171C">circle.png</texture></control>
         <control type="label"><left>32</left><top>32</top><width>220</width><height>220</height><align>center</align><aligny>center</aligny><font>font52_title</font><textcolor>B3EDEDED</textcolor><label>$INFO[ListItem.Property(silo.initials)]</label></control>
-        <control type="image"><left>32</left><top>32</top><width>220</width><height>220</height><aspectratio>scale</aspectratio><texture diffuse="mask_circle.png" background="true">$INFO[ListItem.Art(thumb)]</texture></control>
+        <control type="image"><left>32</left><top>32</top><width>220</width><height>220</height><aspectratio scalediffuse="false">scale</aspectratio><texture diffuse="mask_circle.png" background="true">$INFO[ListItem.Art(thumb)]</texture></control>
         <control type="label"><left>14</left><top>272</top><width>256</width><height>44</height><align>center</align><aligny>center</aligny><font>font27</font><textcolor>9EEDEDED</textcolor><label>$INFO[ListItem.Label]</label></control>
         <control type="label"><left>14</left><top>316</top><width>256</width><height>30</height><align>center</align><aligny>center</aligny><font>font10</font><textcolor>9EEDEDED</textcolor><label>$INFO[ListItem.Property(silo.caption)]</label></control>
       </itemlayout>
@@ -35,7 +35,7 @@
           <control type="image"><left>20</left><top>20</top><width>244</width><height>244</height><texture colordiffuse="FFEDEDED">ring_circle.png</texture><visible>Control.HasFocus(300)</visible></control>
           <control type="image"><left>32</left><top>32</top><width>220</width><height>220</height><texture colordiffuse="FF15171C">circle.png</texture></control>
           <control type="label"><left>32</left><top>32</top><width>220</width><height>220</height><align>center</align><aligny>center</aligny><font>font52_title</font><textcolor>FFEDEDED</textcolor><label>$INFO[ListItem.Property(silo.initials)]</label></control>
-          <control type="image"><left>32</left><top>32</top><width>220</width><height>220</height><aspectratio>scale</aspectratio><texture diffuse="mask_circle.png" background="true">$INFO[ListItem.Art(thumb)]</texture></control>
+          <control type="image"><left>32</left><top>32</top><width>220</width><height>220</height><aspectratio scalediffuse="false">scale</aspectratio><texture diffuse="mask_circle.png" background="true">$INFO[ListItem.Art(thumb)]</texture></control>
         </control>
         <control type="label"><left>14</left><top>282</top><width>256</width><height>44</height><align>center</align><aligny>center</aligny><font>font27</font><textcolor>FFEDEDED</textcolor><label>$INFO[ListItem.Label]</label><scroll>true</scroll></control>
         <control type="label"><left>14</left><top>326</top><width>256</width><height>30</height><align>center</align><aligny>center</aligny><font>font10</font><textcolor>9EEDEDED</textcolor><label>$INFO[ListItem.Property(silo.caption)]</label></control>

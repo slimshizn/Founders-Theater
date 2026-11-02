@@ -25,7 +25,7 @@
         <top>0</top>
         <width>1229</width>
         <height>756</height>
-        <aspectratio>scale</aspectratio>
+        <aspectratio scalediffuse="false">scale</aspectratio>
         <fadetime>400</fadetime>
         <texture diffuse="mask_hero.png" background="true">$INFO[Window.Property(silo.backdrop)]</texture>
         <visible>!String.IsEmpty(Window.Property(silo.backdrop))</visible>
@@ -110,7 +110,7 @@
             <top>0</top>
             <width>260</width>
             <height>390</height>
-            <aspectratio>scale</aspectratio>
+            <aspectratio scalediffuse="false">scale</aspectratio>
             <texture diffuse="mask_grid.png" background="true">$INFO[ListItem.Art(poster)]</texture>
           </control>
           <control type="image">
@@ -193,7 +193,7 @@
             <top>0</top>
             <width>260</width>
             <height>390</height>
-            <aspectratio>scale</aspectratio>
+            <aspectratio scalediffuse="false">scale</aspectratio>
             <texture diffuse="mask_grid.png" background="true">$INFO[ListItem.Art(poster)]</texture>
           </control>
           <control type="image">

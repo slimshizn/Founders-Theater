@@ -16,7 +16,7 @@
     <!-- Avatar and name of the profile as it will be saved. -->
     <control type="image"><left>152</left><top>300</top><width>220</width><height>220</height><texture colordiffuse="FF15171C">circle.png</texture></control>
     <control type="label"><left>152</left><top>300</top><width>220</width><height>220</height><align>center</align><aligny>center</aligny><font>font52_title</font><textcolor>FFEDEDED</textcolor><label>$INFO[Window.Property(silo.initials)]</label></control>
-    <control type="image"><left>152</left><top>300</top><width>220</width><height>220</height><aspectratio>scale</aspectratio><texture diffuse="mask_circle.png" background="true">$INFO[Window.Property(silo.avatar)]</texture></control>
+    <control type="image"><left>152</left><top>300</top><width>220</width><height>220</height><aspectratio scalediffuse="false">scale</aspectratio><texture diffuse="mask_circle.png" background="true">$INFO[Window.Property(silo.avatar)]</texture></control>
     <control type="label"><left>88</left><top>540</top><width>348</width><height>44</height><align>center</align><aligny>center</aligny><font>font30_title</font><textcolor>FFEDEDED</textcolor><label>$INFO[Window.Property(silo.name)]</label></control>
     <control type="textbox"><left>88</left><top>600</top><width>440</width><height>200</height><font>font12</font><textcolor>BFEDEDED</textcolor><label>$INFO[Window.Property(silo.note)]</label></control>
 

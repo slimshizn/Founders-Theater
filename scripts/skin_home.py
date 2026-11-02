@@ -56,12 +56,21 @@ def visible(condition):
     return "<visible>{}</visible>".format(esc(condition)) if condition else ""
 
 
+
+def aspect_ratio(aspect, diffuse=None):
+    """A mask follows the control, not the cropped image: Kodi scales a diffuse
+    texture with a "scale" image by default, cutting round photos flat at the
+    top and bottom (or a poster's corners) whenever the image's shape differs."""
+    if diffuse and aspect == "scale":
+        return '<aspectratio scalediffuse="false">scale</aspectratio>'
+    return "<aspectratio>{}</aspectratio>".format(aspect)
+
 def image(left, top, width, height, name, color=None, border=None, diffuse=None, aspect=None,
           condition=None, control_id=None, fade=None, background=False):
     parts = ['<control type="image"{}>'.format(' id="{}"'.format(control_id) if control_id else ""),
              rect(left, top, width, height)]
     if aspect:
-        parts.append(aspect if aspect.startswith("<") else "<aspectratio>{}</aspectratio>".format(aspect))
+        parts.append(aspect if aspect.startswith("<") else aspect_ratio(aspect, diffuse))
     if fade:
         parts.append("<fadetime>{}</fadetime>".format(fade))
     parts += [texture(name, color=color, border=border, diffuse=diffuse, background=background),

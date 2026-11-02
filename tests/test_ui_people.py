@@ -814,6 +814,15 @@ class SkinTests(unittest.TestCase):
             # Only the add-on's name, never the Silo wordmark (it must not look official).
             self.assertNotIn("silo_wordmark.png", (SKIN / name).read_text(encoding="utf-8"), name)
 
+    def test_masks_follow_the_control_not_the_cropped_image(self):
+        # Kodi scales a diffuse mask with a "scale" image by default, so a portrait photo in a
+        # round mask came out cut flat at the top and bottom (and posters lost their corners).
+        import re
+        for path in sorted(SKIN.glob("*.xml")):
+            for block in re.findall(r'<control type="image".*?</control>', path.read_text(encoding="utf-8"), re.S):
+                if re.search(r'(?<!color)diffuse="mask_', block) and ">scale</aspectratio>" in block:
+                    self.assertIn('<aspectratio scalediffuse="false">scale</aspectratio>', block, path.name)
+
     def test_no_screen_shows_an_icon_beside_the_name(self):
         # The Silo app icon must not read as this add-on's own logo.
         for path in sorted((SKIN).glob("*.xml")):

@@ -26,6 +26,22 @@ from .ui import DetailsWindow, HomeWindow
 AUTO = object()
 
 
+
+def error_location(exc):
+    """The error's type and the innermost add-on line it passed through, for the Kodi log.
+
+    Never the message: networking errors can carry signed URLs.
+    """
+    import traceback
+
+    where = None
+    for frame, line in traceback.walk_tb(exc.__traceback__):
+        path = frame.f_code.co_filename.replace("\\", "/")
+        if "/resources/lib/silo/" in path:
+            where = "{}:{} in {}".format(path.rsplit("/", 1)[-1], line, frame.f_code.co_name)
+    return type(exc).__name__ + (" at " + where if where else "")
+
+
 class Application:
     def __init__(self):
         self.addon = xbmcaddon.Addon()
@@ -61,9 +77,9 @@ class Application:
             self.show_error(exc)
         except (OSError, ValueError, StorageError) as exc:
             self.dialog.ok("Silo", str(exc))
-        except Exception:
+        except Exception as exc:
             # Do not log exception text: networking exceptions can contain signed URLs.
-            xbmc.log("[Silo] Unexpected application error", xbmc.LOGERROR)
+            xbmc.log("[Silo] Unexpected application error: " + error_location(exc), xbmc.LOGERROR)
             self.dialog.ok("Silo", "Silo could not continue. Check the Kodi log for diagnostics.")
         finally:
             if home is not None:
@@ -611,8 +627,8 @@ class Application:
             self.show_error(exc)
         except (OSError, ValueError, StorageError) as exc:
             self.dialog.ok("Silo", str(exc))
-        except Exception:
-            xbmc.log("[Silo] Unexpected window action error", xbmc.LOGERROR)
+        except Exception as exc:
+            xbmc.log("[Silo] Unexpected window action error: " + error_location(exc), xbmc.LOGERROR)
             self.dialog.ok("Silo", "This action could not be completed.")
         return None
 

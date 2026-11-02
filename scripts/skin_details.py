@@ -183,7 +183,7 @@ def episode_card(focused):
     parts = [
         image(8, 8, 360, 202, '<texture border="16" colordiffuse="{}">round16.png</texture>'.format(PLACEHOLDER)),
         image(8, 8, 360, 202, '<texture diffuse="mask_wide.png">$INFO[ListItem.Art(thumb)]</texture>'
-              '<aspectratio>scale</aspectratio>'),
+              '<aspectratio scalediffuse="false">scale</aspectratio>'),
         '<control type="progress"><left>24</left><top>186</top><width>328</width><height>8</height>'
         '<texturebg colordiffuse="4DFFFFFF">white.png</texturebg><lefttexture></lefttexture>'
         '<midtexture colordiffuse="{}">white.png</midtexture><righttexture></righttexture>'
@@ -222,7 +222,7 @@ def cast_person(focused):
         label(20, 12, 200, 200, "$INFO[ListItem.Property(silo.initials)]", "font36_title", MUTED,
               "<align>center</align><aligny>center</aligny>" + visible("String.IsEmpty(ListItem.Art(thumb))")),
         image(20, 12, 200, 200, '<texture diffuse="mask_circle.png">$INFO[ListItem.Art(thumb)]</texture>'
-              '<aspectratio>scale</aspectratio>'),
+              '<aspectratio scalediffuse="false">scale</aspectratio>'),
     ]
     if focused:
         parts.append(image(12, 4, 216, 216, "<texture>ring_circle.png</texture>", visible("Control.HasFocus(530)")))
@@ -249,7 +249,7 @@ def similar_card(focused):
     parts = [
         image(16, 28, 176, 264, '<texture border="16" colordiffuse="{}">round16.png</texture>'.format(PLACEHOLDER)),
         image(16, 28, 176, 264, '<texture diffuse="mask_poster.png">$INFO[ListItem.Art(poster)]</texture>'
-              '<aspectratio>scale</aspectratio>'),
+              '<aspectratio scalediffuse="false">scale</aspectratio>'),
         '<control type="progress"><left>28</left><top>276</top><width>152</width><height>6</height>'
         '<texturebg colordiffuse="4DFFFFFF">white.png</texturebg><lefttexture></lefttexture>'
         '<midtexture colordiffuse="{}">white.png</midtexture><righttexture></righttexture>'
@@ -288,7 +288,7 @@ def extra_card(focused):
     parts = [
         image(8, 8, 352, 198, '<texture border="16" colordiffuse="{}">round16.png</texture>'.format(PLACEHOLDER)),
         image(8, 8, 352, 198, '<texture diffuse="mask_wide.png">$INFO[ListItem.Art(thumb)]</texture>'
-              '<aspectratio>scale</aspectratio>'),
+              '<aspectratio scalediffuse="false">scale</aspectratio>'),
     ]
     if focused:
         parts.append(image(4, 4, 360, 206, '<texture border="24" colordiffuse="E6FFFFFF">ring16.png</texture>',
@@ -351,7 +351,7 @@ def hero():
                                        1221 + slot))
     rows = [
         "      " + image(691, 0, 1229, 756, '<texture diffuse="mask_details.png">$INFO[{}]</texture>'
-                         '<aspectratio>scale</aspectratio><fadetime>400</fadetime>'.format(prop("silo.backdrop"))),
+                         '<aspectratio scalediffuse=\"false\">scale</aspectratio><fadetime>400</fadetime>'.format(prop("silo.backdrop"))),
         "      " + image(100, 116, 650, 160, "<texture>$INFO[{}]</texture><aspectratio align=\"left\" "
                          "aligny=\"bottom\">keep</aspectratio><fadetime>200</fadetime>".format(prop("silo.logo")),
                          visible(has("silo.logo"))),
