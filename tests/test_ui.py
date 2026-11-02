@@ -77,6 +77,15 @@ class ApplicationFlowTests(unittest.TestCase):
         self.app.profile = {}
         self.app.profile_avatar = ""
 
+    def test_screens_can_take_a_name_argument(self):
+        # A person screen gets the person's name= as well; it once clashed with
+        # open_screen's own first parameter and raised TypeError on every cast click.
+        target = MagicMock(return_value="shown")
+        with patch("importlib.import_module", return_value=types.SimpleNamespace(open_person=target)):
+            result = self.app.open_screen("person", person_id="7", name="Example Person")
+        self.assertEqual(result, "shown")
+        target.assert_called_once_with(self.app, person_id="7", name="Example Person")
+
     def test_unexpected_errors_log_where_they_happened_but_never_their_text(self):
         log = KODI_MODULES["xbmc"].log
         log.reset_mock()

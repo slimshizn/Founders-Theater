@@ -1081,11 +1081,14 @@ class Application:
         "subtitle_sync": ("ui_subtitles", "sync_subtitles"),
     }
 
-    def open_screen(self, name, **kwargs):
-        """Open another screen by name; returns whatever that screen returns."""
+    def open_screen(self, screen, /, **kwargs):
+        """Open another screen by name; returns whatever that screen returns.
+
+        ``screen`` is positional-only: screens take their own ``name=`` (a person's name).
+        """
         import importlib
 
-        module_name, function_name = self.SCREENS[name]
+        module_name, function_name = self.SCREENS[screen]
         module = importlib.import_module("." + module_name, __package__)
         return getattr(module, function_name)(self, **kwargs)
 
