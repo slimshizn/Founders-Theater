@@ -103,7 +103,7 @@ def _write(path: Path, data: bytes) -> None:
 
 
 WIDGETS_ID = "plugin.video.silotheater"
-WIDGETS_FILES = ("addon.xml", "default.py", "icon.png")
+WIDGETS_FILES = ("addon.xml", "default.py")
 
 
 def _widgets(root: Path):

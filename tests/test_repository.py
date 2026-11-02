@@ -156,7 +156,7 @@ class WidgetsAddonTests(unittest.TestCase):
             with zipfile.ZipFile(package) as archive:
                 self.assertEqual(sorted(archive.namelist()), [
                     "plugin.video.silotheater/LICENSE", "plugin.video.silotheater/addon.xml",
-                    "plugin.video.silotheater/default.py", "plugin.video.silotheater/icon.png"])
+                    "plugin.video.silotheater/default.py"])
             silo = catalog.find("addon[@id='script.silo']")
             self.assertIsNone(silo.find("extension[@point='xbmc.python.pluginsource']"))
 

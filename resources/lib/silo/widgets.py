@@ -443,7 +443,7 @@ class Plugin:
 
     def signed_out(self):
         result = xbmcgui.ListItem(label=SIGN_IN_LABEL, offscreen=True)
-        result.setArt({"icon": "special://home/addons/{}/resources/icon.png".format(ADDON_ID)})
+        result.setArt({"icon": "DefaultAddon.png"})
         result.setProperty("IsPlayable", "false")
         xbmcplugin.addDirectoryItems(self.handle, [(plugin_url("signin"), result, False)], 1)
         xbmcplugin.endOfDirectory(self.handle, succeeded=True, cacheToDisc=False)

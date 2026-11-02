@@ -5282,18 +5282,10 @@
       <top>56</top>
       <width>1920</width>
       <height>64</height>
-      <control type="image">
-        <left>88</left>
-        <top>12</top>
-        <width>40</width>
-        <height>40</height>
-        <aspectratio>keep</aspectratio>
-        <texture>brand_icon.png</texture>
-      </control>
       <control type="label">
-        <left>142</left>
+        <left>88</left>
         <top>0</top>
-        <width>466</width>
+        <width>520</width>
         <height>64</height>
         <font>font25_title</font>
         <textcolor>FFFFFFFF</textcolor>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="script.silo" name="Founders Theater - Silo for Kodi" version="0.8.2" provider-name="slimshizn">
+<addon id="script.silo" name="Founders Theater" version="0.8.3" provider-name="slimshizn">
   <requires>
     <import addon="xbmc.python" version="3.0.1" />
     <import addon="xbmc.gui" version="5.17.0" />
@@ -14,8 +14,5 @@
     <disclaimer lang="en_GB">Founders Theater is not made or endorsed by the Silo project. Select HDR and Dolby Vision settings that your device and display support.</disclaimer>
     <license>AGPL-3.0-or-later</license>
     <platform>all</platform>
-    <assets>
-      <icon>resources/icon.png</icon>
-    </assets>
   </extension>
 </addon>

@@ -809,11 +809,16 @@ class SkinTests(unittest.TestCase):
             tree = ET.parse(SKIN / name)
             labels = [node.findtext("label") for node in tree.iter("control")]
             self.assertIn(DISCLAIMER, labels, name)
-            # The install page's lockup: the add-on icon, FOUNDERS in gold and THEATER in white.
+            # The install page's lockup: FOUNDERS in gold and THEATER in white, with no icon.
             self.assertIn("[COLOR FFE8CF8F]FOUNDERS[/COLOR] THEATER", labels, name)
-            self.assertIn("brand_icon.png", [node.findtext("texture") for node in tree.iter("control")], name)
             # Only the add-on's name, never the Silo wordmark (it must not look official).
             self.assertNotIn("silo_wordmark.png", (SKIN / name).read_text(encoding="utf-8"), name)
+
+    def test_no_screen_shows_an_icon_beside_the_name(self):
+        # The Silo app icon must not read as this add-on's own logo.
+        for path in sorted((SKIN).glob("*.xml")):
+            self.assertNotIn("brand_icon.png", path.read_text(encoding="utf-8"), path.name)
+        self.assertFalse((MEDIA / "brand_icon.png").exists())
 
     def test_profile_and_code_controls_match_controllers(self):
         profiles = controls_by_id(ET.parse(SKIN / "SiloProfiles.xml"))

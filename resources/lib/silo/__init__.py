@@ -1,1 +1,1 @@
-"""Silo for Kodi: original native API client and application components."""
+"""Founders Theater: original native API client and application components."""
