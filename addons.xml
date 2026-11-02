@@ -15,15 +15,15 @@
       <platform>all</platform>
     </extension>
   </addon>
-  <addon id="repository.silo.theater" name="Founders Theater Repository" version="1.0.2" provider-name="slimshizn">
+  <addon id="repository.silo.theater" name="Founders Theater Repository" version="1.0.3" provider-name="slimshizn">
     <requires>
       <import addon="xbmc.addon" version="12.0.0" />
     </requires>
     <extension point="xbmc.addon.repository" name="Founders Theater Repository">
       <dir>
-        <info compressed="false">https://raw.githubusercontent.com/slimshizn/Silo-Theater/gh-pages/addons.xml</info>
-        <checksum verify="md5">https://raw.githubusercontent.com/slimshizn/Silo-Theater/gh-pages/addons.xml.md5</checksum>
-        <datadir zip="true">https://raw.githubusercontent.com/slimshizn/Silo-Theater/gh-pages/zips/</datadir>
+        <info compressed="false">https://raw.githubusercontent.com/slimshizn/Founders-Theater/gh-pages/addons.xml</info>
+        <checksum verify="md5">https://raw.githubusercontent.com/slimshizn/Founders-Theater/gh-pages/addons.xml.md5</checksum>
+        <datadir zip="true">https://raw.githubusercontent.com/slimshizn/Founders-Theater/gh-pages/zips/</datadir>
         <hashes>sha256</hashes>
       </dir>
     </extension>
