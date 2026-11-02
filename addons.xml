@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <addons>
-  <addon id="plugin.video.silotheater" name="Founders Theater Widgets" version="1.0.4" provider-name="slimshizn">
+  <addon id="plugin.video.silotheater" name="Founders Theater Widgets" version="1.1.0" provider-name="slimshizn">
     <requires>
       <import addon="xbmc.python" version="3.0.1" />
-      <import addon="script.silo" version="0.5.5" />
+      <import addon="script.founderstheater" version="0.9.0" />
     </requires>
     <extension point="xbmc.python.pluginsource" library="default.py">
       <provides>video</provides>
@@ -34,7 +34,7 @@
       <platform>all</platform>
     </extension>
   </addon>
-  <addon id="script.silo" name="Founders Theater" version="0.8.3" provider-name="slimshizn">
+  <addon id="script.founderstheater" name="Founders Theater" version="0.9.0" provider-name="slimshizn">
     <requires>
       <import addon="xbmc.python" version="3.0.1" />
       <import addon="xbmc.gui" version="5.17.0" />
@@ -47,6 +47,20 @@
       <summary lang="en_GB">Founders Theater: a community Kodi add-on for Silo</summary>
       <description lang="en_GB">Founders Theater is a community add-on for Silo media servers, not an official Silo app. Browse your Silo library with a TV interface modeled on the Silo Android TV app, choose a media file and resume movies and episodes from your saved position.</description>
       <disclaimer lang="en_GB">Founders Theater is not made or endorsed by the Silo project. Select HDR and Dolby Vision settings that your device and display support.</disclaimer>
+      <license>AGPL-3.0-or-later</license>
+      <platform>all</platform>
+    </extension>
+  </addon>
+  <addon id="script.silo" name="Founders Theater (update helper)" version="0.9.0" provider-name="slimshizn">
+    <requires>
+      <import addon="xbmc.python" version="3.0.1" />
+      <import addon="script.founderstheater" version="0.9.0" />
+    </requires>
+    <extension point="xbmc.python.script" library="default.py" />
+    <extension point="xbmc.addon.metadata">
+      <summary lang="en_GB">Moves Founders Theater to its new add-on</summary>
+      <description lang="en_GB">Founders Theater now installs as its own add-on. This update helper brings it in, keeps your sign-in and settings, and passes old shortcuts and favourites on to it. Once Founders Theater opens normally, you can uninstall this helper.</description>
+      <lifecyclestate type="deprecated" lang="en_GB">Founders Theater has moved to a new add-on, which this update installs. You can uninstall this helper once Founders Theater opens normally.</lifecyclestate>
       <license>AGPL-3.0-or-later</license>
       <platform>all</platform>
     </extension>
