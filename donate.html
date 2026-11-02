@@ -17,9 +17,11 @@
       a:focus-visible, button:focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; border-radius: 4px; }
       .wrap { width: min(1140px, calc(100% - 64px)); margin-inline: auto; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-block: 26px; }
-      .brand { display: flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; font-size: 14px; font-weight: 700; letter-spacing: .18em; }
-      .brand img { width: 34px; height: 34px; border-radius: 9px; }
-      .brand span { color: var(--gold); }
+      .brand { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+      .brand-name { margin-right: -.18em; color: var(--ink); text-decoration: none; font-size: 14px; font-weight: 700; letter-spacing: .18em; }
+      .brand-name span { color: var(--gold); }
+      .works { display: flex; align-items: center; gap: 5px; margin: 0; color: var(--ink); font-size: 13px; line-height: 20px; }
+      .works img { display: block; width: 16px; height: 16px; }
       header nav a { color: var(--muted); font-size: 14px; text-decoration: none; }
       header nav a:hover { color: var(--ink); }
 
@@ -50,7 +52,7 @@
   <body>
     <div class="wrap">
       <header>
-        <a href="./" class="brand" aria-label="Founders Theater home"><img src="zips/script.silo/resources/icon.png" alt="" width="34" height="34"><span>FOUNDERS</span> THEATER</a>
+        <div class="brand"><a href="./" class="brand-name" aria-label="Founders Theater home"><span>FOUNDERS</span> THEATER</a><p class="works">Works with Silo <img src="silo-project-icon.svg" alt="" width="16" height="16"></p></div>
         <nav aria-label="Links"><a href="https://github.com/slimshizn/Silo-Theater">GitHub ↗</a></nav>
       </header>
       <main id="top">
@@ -73,7 +75,7 @@
         </section>
       </main>
       <footer>
-        <p>Not an official Silo app · AGPL-3.0</p>
+        <p>Not an official Silo app · Silo and the Silo logo are trademarks of Silo Media L.L.C. · AGPL-3.0</p>
         <a href="./">Back to install</a>
       </footer>
     </div>
