@@ -147,8 +147,10 @@ def _bridge(root: Path, addon: Dict[str, str]):
     if bridge is not None:
         manifest = bridge[0]
         required = manifest.find("requires/import[@addon='{}']".format(addon["id"]))
-        if required is None or required.get("version") != addon["version"]:
-            raise ValueError("bridge/addon.xml must require {} {}".format(addon["id"], addon["version"]))
+        version = lambda value: tuple(int(part) for part in str(value).split("."))
+        # A minimum version: later releases ship without a new bridge.
+        if required is None or version(required.get("version")) > version(addon["version"]):
+            raise ValueError("bridge/addon.xml must require {} {} or older".format(addon["id"], addon["version"]))
         if manifest.findall("extension[@point='xbmc.service']"):
             raise ValueError("The bridge must not run a service; the new add-on's service opens it on start")
     return bridge

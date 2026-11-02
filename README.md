@@ -21,6 +21,7 @@
 - For You, Calendar, Watchlist, Favorites, History, and Requests when your server offers them.
 - Search with people, and person pages with their filmography.
 - Title pages with seasons and episodes, cast, trailers and extras, related titles and the full synopsis.
+- Rate movies and series from 1 to 5 stars from the title page's More menu.
 
 **Watch**
 - Plays original files directly, and has your server convert what your device can't play.

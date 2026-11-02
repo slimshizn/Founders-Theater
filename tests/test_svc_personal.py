@@ -20,6 +20,21 @@ class PersonalServiceTests(unittest.TestCase):
         svc_personal.set_watched(self.client, "episode:1", False)
         self.client.request.assert_called_with("DELETE", "/watched/episode%3A1")
 
+    def test_ratings_put_stars_or_delete(self):
+        svc_personal.set_rating(self.client, "movie:a b", 5)
+        self.client.request.assert_called_with("PUT", "/ratings/movie%3Aa%20b", body={"rating": 5})
+        svc_personal.set_rating(self.client, "movie:a b", None)
+        self.client.request.assert_called_with("DELETE", "/ratings/movie%3Aa%20b")
+        for bad in (0, 6, True, "4", 4.5):
+            with self.assertRaises(ValueError):
+                svc_personal.set_rating(self.client, "movie:1", bad)
+
+    def test_rating_reads_only_whole_stars_from_detail(self):
+        self.assertEqual(svc_personal.rating({"user_rating": 3}), 3)
+        for detail in ({}, None, {"user_rating": None}, {"user_rating": 0}, {"user_rating": 7},
+                       {"user_rating": True}, {"user_rating": "4"}):
+            self.assertIsNone(svc_personal.rating(detail), detail)
+
     def test_dismiss_only_known_surfaces(self):
         svc_personal.dismiss(self.client, "next_up", "episode:2", {"series_id": "series:1"})
         self.client.request.assert_called_with("PUT", "/home/dismissals/next_up/episode%3A2",

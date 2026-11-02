@@ -77,10 +77,17 @@ LANGUAGE_CODES = {"eng": "en", "fre": "fr", "fra": "fr", "ger": "de", "deu": "de
                   "hun": "hu", "tha": "th"}
 MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
           "November", "December")
+# Titles the profile can rate 1 to 5 stars from the More menu (svc_personal.set_rating).
+RATED_KINDS = ("movie", "series")
 
 
 def _text(value):
     return str(value).strip() if value not in (None, "") else ""
+
+
+def stars_label(stars):
+    """Plain text: Kodi's default skin font may not draw a star character."""
+    return "1 star" if stars == 1 else "{} stars".format(stars)
 
 
 def split_title(title):
@@ -971,6 +978,21 @@ class DetailsWindow(xbmcgui.WindowXML):
         self.refresh(self.selected_file_id)
         self.reload_children()
 
+    def rate(self):
+        """Pick 5 down to 1 stars, or remove the rating; saved to the profile."""
+        current = svc_personal.rating(self.item)
+        choices = list(range(5, 0, -1)) + ([None] if current else [])
+        labels = [stars_label(stars) if stars else "Remove rating" for stars in choices]
+        chosen = self.application.dialog.select("Rate " + (_text(self.item.get("title")) or "this title"), labels,
+                                                preselect=choices.index(current) if current else -1)
+        if not isinstance(chosen, int) or not 0 <= chosen < len(choices) or choices[chosen] == current:
+            return
+        stars = choices[chosen]
+        svc_personal.set_rating(self.application.client, self.item["content_id"], stars)
+        self.item = dict(self.item, user_rating=stars)
+        self.application.dialog.notification(
+            "Founders Theater", "Rated " + stars_label(stars) if stars else "Rating removed", time=2500, sound=False)
+
     def set_season_watched(self, season, on):
         svc_personal.set_watched(self.application.client, season["content_id"], on)
         season["user_data"] = dict(season.get("user_data") or {}, played=on)
@@ -1041,6 +1063,9 @@ class DetailsWindow(xbmcgui.WindowXML):
                 actions.append(("Go to season {}".format(number), self.go_to_season))
         if kind in ("episode", "season") and series_id:
             actions.append(("Go to series", self.go_to_series))
+        if kind in RATED_KINDS:
+            stars = svc_personal.rating(item)
+            actions.append(("Rate ({})".format(stars_label(stars)) if stars else "Rate", self.rate))
         if default_version(item, preferred_file_id=self.selected_file_id):
             actions.append(("Media info", self.show_media_info))
         if self.can_translate():

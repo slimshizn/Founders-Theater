@@ -195,11 +195,11 @@ class BridgeAddonTests(unittest.TestCase):
         self.bridge = self.catalog.find("addon[@id='script.silo']")
         self.addon = self.catalog.find("addon[@id='script.founderstheater']")
 
-    def test_bridge_is_an_update_for_0_8_3_and_requires_this_release(self):
+    def test_bridge_is_an_update_for_0_8_3_and_requires_a_published_release(self):
         version = lambda value: tuple(int(part) for part in value.split("."))
         self.assertGreater(version(self.bridge.get("version")), version("0.8.3"))
         required = self.bridge.find("requires/import[@addon='script.founderstheater']")
-        self.assertEqual(required.get("version"), self.addon.get("version"))
+        self.assertLessEqual(version(required.get("version")), version(self.addon.get("version")))
 
     def test_bridge_runs_no_service_and_is_marked_deprecated(self):
         self.assertEqual(self.bridge.findall("extension[@point='xbmc.service']"), [])
@@ -215,14 +215,15 @@ class BridgeAddonTests(unittest.TestCase):
             self.assertEqual(archive.read("script.silo/resources/player_menu.py"),
                              (ROOT / "resources/player_menu.py").read_bytes())
 
-    def test_bridge_must_require_the_current_release(self):
+    def test_bridge_cannot_require_a_release_that_does_not_exist_yet(self):
         root = Path(self.temporary.name) / "source"
         shutil.copytree(ROOT / "bridge", root / "bridge")
         (root / "resources").mkdir()
         shutil.copyfile(ROOT / "resources/player_menu.py", root / "resources/player_menu.py")
         shutil.copyfile(ROOT / "LICENSE", root / "LICENSE")
-        with self.assertRaisesRegex(ValueError, "must require script.founderstheater 9.9.9"):
-            _bridge(root, {"id": "script.founderstheater", "version": "9.9.9"})
+        with self.assertRaisesRegex(ValueError, "must require script.founderstheater 0.1.0 or older"):
+            _bridge(root, {"id": "script.founderstheater", "version": "0.1.0"})
+        self.assertIsNotNone(_bridge(root, {"id": "script.founderstheater", "version": "9.9.9"}))
         self.assertEqual(BRIDGE_ID, "script.silo")
 
 

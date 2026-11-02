@@ -617,7 +617,7 @@ class DetailsWindowTests(unittest.TestCase):
         window = self.window(item)
         window.onInit()
         self.choose_more(window, "Media info")
-        self.assertEqual(self.menu, ["Mark as watched", "Media info"])
+        self.assertEqual(self.menu, ["Mark as watched", "Rate", "Media info"])
         title, text = self.app.dialog.textviewer.call_args.args
         self.assertEqual(title, "Media info")
         for expected in ("Example.UHD.mkv", "MKV · 2160p · 4.00 GB · 12000 kbps · 2:00:00",
@@ -654,6 +654,53 @@ class DetailsWindowTests(unittest.TestCase):
         self.assertTrue(window.seasons[0]["user_data"]["played"])
         self.choose_more(window, "Mark Season 1 as unwatched")
         self.assertEqual(calls[-1], ("DELETE", "/watched/season%3A1", None))
+
+    def test_rating_a_movie_saves_stars_and_shows_them_in_the_menu(self):
+        calls = self.route({})
+        window = self.window(movie_item())
+        window.onInit()
+        self.app.dialog.select.return_value = 1  # 5, 4, 3, 2, 1 stars
+        self.choose_more(window, "Rate")
+        heading, labels = self.app.dialog.select.call_args.args
+        self.assertEqual(labels, ["5 stars", "4 stars", "3 stars", "2 stars", "1 star"])
+        self.assertEqual(self.app.dialog.select.call_args.kwargs["preselect"], -1)
+        self.assertEqual(calls[-1], ("PUT", "/ratings/movie%3A1", {"rating": 4}))
+        self.assertEqual(window.item["user_rating"], 4)
+        self.choose_more(window, "nothing")
+        self.assertIn("Rate (4 stars)", self.menu)
+
+    def test_changing_or_removing_a_rating(self):
+        calls = self.route({})
+        window = self.window(dict(movie_item(), user_rating=4))
+        window.onInit()
+        self.app.dialog.select.return_value = 5  # Remove rating, offered once rated
+        self.choose_more(window, "Rate (4 stars)")
+        labels = self.app.dialog.select.call_args.args[1]
+        self.assertEqual(labels[-1], "Remove rating")
+        self.assertEqual(self.app.dialog.select.call_args.kwargs["preselect"], 1)
+        self.assertEqual(calls[-1], ("DELETE", "/ratings/movie%3A1", None))
+        self.assertIsNone(window.item["user_rating"])
+        self.choose_more(window, "nothing")
+        self.assertIn("Rate", self.menu)
+
+    def test_choosing_the_same_rating_or_cancelling_sends_nothing(self):
+        calls = self.route({})
+        window = self.window(dict(movie_item(), user_rating=3))
+        window.onInit()
+        for chosen in (2, -1):  # 3 stars again, then Back
+            self.app.dialog.select.return_value = chosen
+            self.choose_more(window, "Rate (3 stars)")
+        self.assertFalse([call for call in calls if call[1].startswith("/ratings/")])
+
+    def test_series_can_be_rated_but_episodes_and_seasons_cannot(self):
+        self.route({("GET", "/shuffles/capabilities"): {"state": "available", "scope_kinds": []}})
+        window = self.series_window()
+        self.choose_more(window, "nothing")
+        self.assertIn("Rate", self.menu)
+        for kind in ("episode", "season"):
+            window.item = dict(window.item, type=kind)
+            self.choose_more(window, "nothing")
+            self.assertNotIn("Rate", self.menu, kind)
 
     def test_shuffle_is_hidden_when_the_server_cannot_shuffle(self):
         self.route({("GET", "/shuffles/capabilities"): {"state": "not_configured", "scope_kinds": []}})

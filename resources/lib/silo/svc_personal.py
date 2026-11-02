@@ -1,7 +1,8 @@
-"""The profile's own lists and marks: watchlist, favorites, watched, history.
+"""The profile's own lists and marks: watchlist, favorites, watched, ratings, history.
 
 Routes are Silo /api/v2: PUT/DELETE /watchlist/{id}, PUT/DELETE /favorites/{id},
 POST/DELETE /watched/{id} (a season or series expands to its episodes),
+PUT/DELETE /ratings/{id} (1 to 5 stars; item detail carries it as user_rating),
 PUT /home/dismissals/{surface}/{id}, and GET /watchlist, /favorites, /history.
 """
 
@@ -24,6 +25,21 @@ def set_favorite(client, item_id, on):
 
 def set_watched(client, item_id, on):
     return client.request("POST" if on else "DELETE", "/watched/" + _id(item_id))
+
+
+def rating(item):
+    """The profile's stars for an item detail (1 to 5), or None when unrated."""
+    value = (item or {}).get("user_rating")
+    return value if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 5 else None
+
+
+def set_rating(client, item_id, stars):
+    """Rate an item 1 to 5 stars; None removes the rating."""
+    if stars is None:
+        return client.request("DELETE", "/ratings/" + _id(item_id))
+    if not isinstance(stars, int) or isinstance(stars, bool) or not 1 <= stars <= 5:
+        raise ValueError("A rating is 1 to 5 stars.")
+    return client.request("PUT", "/ratings/" + _id(item_id), body={"rating": stars})
 
 
 def dismiss(client, surface, item_id, item=None):
