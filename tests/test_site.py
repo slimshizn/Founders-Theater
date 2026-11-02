@@ -121,5 +121,14 @@ class DonatePageTests(unittest.TestCase):
         self.assertIn("donate.html", [link["href"] for link in index.links])
 
 
+class HeaderTests(unittest.TestCase):
+    def test_header_names_founders_theater_and_works_with_silo(self):
+        for name in ("index.html", "donate.html"):
+            html = (PROJECT_ROOT / "site" / name).read_text(encoding="utf-8")
+            self.assertNotIn("resources/icon.png", html, name)
+            self.assertIn('<p class="works">Works with Silo <img src="silo-project-icon.svg"', html, name)
+        self.assertTrue((PROJECT_ROOT / "site/silo-project-icon.svg").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

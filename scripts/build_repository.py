@@ -142,13 +142,13 @@ def build_repository(root: Path = ROOT, output_dir: Optional[Path] = None) -> Di
     if not template.is_file() or template.is_symlink():
         raise ValueError("The website template site/index.html is missing or is a symlink")
     landing_page = template.read_bytes()
-    # Other site pages (such as donate.html) are published beside the landing page.
+    # Other site pages (such as donate.html) and their images are published beside the landing page.
     pages = {}
-    for page in sorted((root / "site").glob("*.html")):
-        if page.name == "index.html":
+    for page in sorted((root / "site").iterdir()):
+        if page.name == "index.html" or page.suffix not in (".html", ".svg", ".png"):
             continue
         if not page.is_file() or page.is_symlink():
-            raise ValueError("The website page site/{} is not a regular file".format(page.name))
+            raise ValueError("The website file site/{} is not a regular file".format(page.name))
         pages[page.name] = page.read_bytes()
     addon = validate_addon(root)
     repository_manifest = validate_repository(root)

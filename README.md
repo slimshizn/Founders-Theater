@@ -2,14 +2,16 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/founders-theater-dark.png">
     <source media="(prefers-color-scheme: light)" srcset=".github/assets/founders-theater-light.png">
-    <img src=".github/assets/founders-theater-dark.png" alt="Founders Theater" width="552">
+    <img src=".github/assets/founders-theater-dark.png" alt="Founders Theater" width="472">
   </picture>
+  <br>
+  Works with Silo <img src="site/silo-project-icon.svg" alt="" width="16" height="16">
 </p>
 
 <p align="center">Your Silo media library on Kodi, with a TV interface built for the remote.<br>For <b>Kodi 21 or newer</b>.</p>
 
 > [!NOTE]
-> Founders Theater is an unofficial, third-party add-on made by the community. It is not affiliated with, made by or endorsed by the Silo project. Silo is a trademark of Silo Media L.L.C.
+> Founders Theater is an unofficial, third-party add-on made by the community. It is not affiliated with, made by or endorsed by the Silo project. Silo and the Silo logo are trademarks of Silo Media L.L.C.
 
 ## What it offers
 

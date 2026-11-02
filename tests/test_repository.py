@@ -132,8 +132,11 @@ class RepositoryTests(unittest.TestCase):
 
     def test_other_site_pages_are_published_beside_the_landing_page(self):
         (self.root / "site/donate.html").write_text("<!doctype html><p>Donate</p>\n")
+        (self.root / "site/mark.svg").write_text("<svg xmlns=\"http://www.w3.org/2000/svg\"/>\n")
+        (self.root / "site/notes.txt").write_text("not published\n")
         paths = build_repository(self.root, self.output)
-        self.assertEqual(paths["pages"], [self.output / "donate.html"])
+        self.assertEqual(paths["pages"], [self.output / "donate.html", self.output / "mark.svg"])
+        self.assertFalse((self.output / "notes.txt").exists())
         self.assertEqual((self.output / "donate.html").read_bytes(), (self.root / "site/donate.html").read_bytes())
 
 
