@@ -41,16 +41,16 @@
 
 ## Install in Kodi
 
-1. Open **Settings → File manager → Add source**, enter `https://slimshizn.github.io/Silo-Theater/` and name it **Founders Theater**.
+1. Open **Settings → File manager → Add source**, enter `https://slimshizn.github.io/Founders-Theater/` and name it **Founders Theater**.
 2. Open **Add-ons → Install from zip file → Founders Theater**, and allow unknown sources if Kodi asks.
-3. Select **repository.silo.theater-1.0.2.zip**.
+3. Select **repository.silo.theater-1.0.3.zip**.
 4. Open **Install from repository → Founders Theater Repository** and install **Founders Theater**.
 
 Open Founders Theater and sign in with your server address and Silo account. Updates arrive through the repository. For home screen widgets, also install **Founders Theater Widgets** from the same repository (**Video add-ons**).
 
 ## Support Founders Theater
 
-If you'd like to support development, you can [donate in Monero (XMR)](https://slimshizn.github.io/Silo-Theater/donate.html). Donations support Founders Theater, an independent add-on. They do not go to the Silo project.
+If you'd like to support development, you can [donate in Monero (XMR)](https://slimshizn.github.io/Founders-Theater/donate.html). Donations support Founders Theater, an independent add-on. They do not go to the Silo project.
 
 ## License
 

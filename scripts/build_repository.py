@@ -22,8 +22,8 @@ except ImportError:
 
 
 REPOSITORY_ID = "repository.silo.theater"
-PAGES_BASE = "https://slimshizn.github.io/Silo-Theater/"
-DOWNLOAD_BASE = "https://raw.githubusercontent.com/slimshizn/Silo-Theater/gh-pages/"
+PAGES_BASE = "https://slimshizn.github.io/Founders-Theater/"
+DOWNLOAD_BASE = "https://raw.githubusercontent.com/slimshizn/Founders-Theater/gh-pages/"
 
 
 def validate_repository(root: Path) -> ET.Element:

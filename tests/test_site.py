@@ -9,7 +9,7 @@ from urllib.parse import unquote, urljoin, urlsplit
 import xml.etree.ElementTree as ET
 
 
-BASE_URL = "https://slimshizn.github.io/Silo-Theater/"
+BASE_URL = "https://slimshizn.github.io/Founders-Theater/"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ET.parse(PROJECT_ROOT / "repository/repository.silo.theater/addon.xml").getroot()
 INSTALLER = "{}-{}.zip".format(REPOSITORY.attrib["id"], REPOSITORY.attrib["version"])
