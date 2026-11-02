@@ -103,30 +103,55 @@ def _write(path: Path, data: bytes) -> None:
 
 
 WIDGETS_ID = "plugin.video.silotheater"
-WIDGETS_FILES = ("addon.xml", "default.py")
+# script.silo was Founders Theater's id up to 0.8.3. It now ships as a bridge
+# that requires the renamed add-on and forwards to it (bridge/default.py). Its
+# copy of the keymap's menu script keeps keymaps written by 0.8.3 working.
+BRIDGE_ID = "script.silo"
 
 
-def _widgets(root: Path):
-    """The optional widgets add-on: (manifest, zip bytes), or None without widgets/."""
-    folder = root / "widgets"
+def _extra_addon(root: Path, folder_name: str, addon_id: str, sources):
+    """An add-on built from ``folder_name``: (manifest, zip bytes), or None without it.
+
+    ``sources`` lists (name in the package, path) pairs; LICENSE is added.
+    """
+    folder = root / folder_name
     if not folder.is_dir():
         return None
     manifest = ET.parse(folder / "addon.xml").getroot()
-    if manifest.get("id") != WIDGETS_ID or not manifest.get("version"):
-        raise ValueError("widgets/addon.xml must declare {} with a version".format(WIDGETS_ID))
-    compile((folder / "default.py").read_text(encoding="utf-8"), "widgets/default.py", "exec")
+    if manifest.get("id") != addon_id or not manifest.get("version"):
+        raise ValueError("{}/addon.xml must declare {} with a version".format(folder_name, addon_id))
+    compile((folder / "default.py").read_text(encoding="utf-8"), folder_name + "/default.py", "exec")
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        sources = [(name, folder / name) for name in WIDGETS_FILES] + [("LICENSE", root / "LICENSE")]
-        for name, path in sources:
+        for name, path in list(sources) + [("LICENSE", root / "LICENSE")]:
             if path.is_symlink() or not path.is_file():
-                raise ValueError("Widgets package input is missing or a symlink: {}".format(name))
-            info = zipfile.ZipInfo(WIDGETS_ID + "/" + name, date_time=(1980, 1, 1, 0, 0, 0))
+                raise ValueError("{} package input is missing or a symlink: {}".format(addon_id, name))
+            info = zipfile.ZipInfo(addon_id + "/" + name, date_time=(1980, 1, 1, 0, 0, 0))
             info.create_system = 3
             info.external_attr = 0o100644 << 16
             info.compress_type = zipfile.ZIP_DEFLATED
             archive.writestr(info, path.read_bytes(), compresslevel=9)
     return manifest, buffer.getvalue()
+
+
+def _widgets(root: Path):
+    folder = root / "widgets"
+    return _extra_addon(root, "widgets", WIDGETS_ID, [(name, folder / name) for name in ("addon.xml", "default.py")])
+
+
+def _bridge(root: Path, addon: Dict[str, str]):
+    folder = root / "bridge"
+    bridge = _extra_addon(root, "bridge", BRIDGE_ID, [
+        ("addon.xml", folder / "addon.xml"), ("default.py", folder / "default.py"),
+        ("resources/player_menu.py", root / "resources" / "player_menu.py")])
+    if bridge is not None:
+        manifest = bridge[0]
+        required = manifest.find("requires/import[@addon='{}']".format(addon["id"]))
+        if required is None or required.get("version") != addon["version"]:
+            raise ValueError("bridge/addon.xml must require {} {}".format(addon["id"], addon["version"]))
+        if manifest.findall("extension[@point='xbmc.service']"):
+            raise ValueError("The bridge must not run a service; the new add-on's service opens it on start")
+    return bridge
 
 
 def build_repository(root: Path = ROOT, output_dir: Optional[Path] = None) -> Dict[str, Path]:
@@ -159,6 +184,7 @@ def build_repository(root: Path = ROOT, output_dir: Optional[Path] = None) -> Di
     addon_name = "{id}-{version}.zip".format(**addon)
     repository_name = "{}-{}.zip".format(REPOSITORY_ID, repository_version)
     widgets = _widgets(root)
+    bridge = _bridge(root, addon)
     packages = {
         output / "zips" / addon["id"] / addon_name: addon_zip,
         output / "zips" / REPOSITORY_ID / repository_name: repository_zip,
@@ -167,6 +193,9 @@ def build_repository(root: Path = ROOT, output_dir: Optional[Path] = None) -> Di
     if widgets is not None:
         widgets_name = "{}-{}.zip".format(WIDGETS_ID, widgets[0].get("version"))
         packages[output / "zips" / WIDGETS_ID / widgets_name] = widgets[1]
+    if bridge is not None:
+        bridge_name = "{}-{}.zip".format(BRIDGE_ID, bridge[0].get("version"))
+        packages[output / "zips" / BRIDGE_ID / bridge_name] = bridge[1]
         # Validate all immutable destinations before updating any catalog or file.
     for path, contents in packages.items():
         if path.exists() and path.read_bytes() != contents:
@@ -174,8 +203,9 @@ def build_repository(root: Path = ROOT, output_dir: Optional[Path] = None) -> Di
 
     catalog = ET.Element("addons")
     manifests = [ET.parse(root / "addon.xml").getroot(), repository_manifest]
-    if widgets is not None:
-        manifests.append(widgets[0])
+    for extra in (widgets, bridge):
+        if extra is not None:
+            manifests.append(extra[0])
     for manifest in sorted(manifests, key=lambda value: value.get("id", "")):
         catalog.append(deepcopy(manifest))
     ET.indent(catalog, space="  ")

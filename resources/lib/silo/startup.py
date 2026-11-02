@@ -14,10 +14,13 @@ import time
 from .settings import read_options
 
 HOME_WINDOW = 10000
+# Unchanged by the move to script.founderstheater: Kodi installs the new add-on
+# mid-session and runs this service, and the old add-on already set this flag
+# when Kodi started, so the update never opens Founders Theater by itself.
 STARTED_PROPERTY = "script.silo.startup_handled"
 WAIT_SECONDS = 60  # how long Kodi gets to finish starting up
 POLL_SECONDS = 0.5
-OPEN = "RunScript(script.silo)"
+OPEN = "RunScript(script.founderstheater)"
 
 
 def run(xbmc, xbmcgui, addon, clock=time.monotonic):
@@ -51,5 +54,15 @@ def main():
     import xbmc
     import xbmcaddon
     import xbmcgui
+    import xbmcvfs
 
-    xbmc.log("[Silo] startup: " + run(xbmc, xbmcgui, xbmcaddon.Addon()), xbmc.LOGINFO)
+    from . import keymap, migration
+
+    addon = xbmcaddon.Addon()
+    try:
+        if migration.run(xbmc, xbmcvfs, addon) == "done":
+            # The old keymap runs script.silo's copy of the menu script; point it here.
+            keymap.apply(xbmc, xbmcvfs, read_options(addon)["player_menu_key"], addon.getAddonInfo("path"))
+    except Exception:
+        xbmc.log("[Silo] Could not bring data over from script.silo", xbmc.LOGWARNING)
+    xbmc.log("[Silo] startup: " + run(xbmc, xbmcgui, addon), xbmc.LOGINFO)

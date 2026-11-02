@@ -94,7 +94,7 @@ class FakeAddon:
         return self.settings.get(key, "")
 
     def getAddonInfo(self, key):
-        return {"profile": self.folder, "version": "0.5.0", "id": "script.silo"}.get(key, "")
+        return {"profile": self.folder, "version": "0.5.0", "id": "script.founderstheater"}.get(key, "")
 
 
 def movie(number, **extra):
@@ -328,7 +328,7 @@ class SignedOutTest(WidgetTestCase):
 
     def test_sign_in_item_runs_the_addon(self):
         self.run_plugin("?action=signin")
-        kodi.executebuiltin.assert_called_once_with("RunScript(script.silo)")
+        kodi.executebuiltin.assert_called_once_with("RunScript(script.founderstheater)")
 
     def test_network_failure_ends_directory_unsuccessfully(self):
         self.sign_in()
@@ -342,12 +342,12 @@ class SignedOutTest(WidgetTestCase):
 class DeepLinkTest(WidgetTestCase):
     def test_play_hands_off_to_the_addon(self):
         self.run_plugin("?action=play&id=movie%3Aexample-1")
-        kodi.executebuiltin.assert_called_once_with("RunScript(script.silo,play,movie:example-1)")
+        kodi.executebuiltin.assert_called_once_with("RunScript(script.founderstheater,play,movie:example-1)")
         self.assertEqual(self.transport.calls, [])
 
     def test_open_hands_off_to_the_addon(self):
         self.run_plugin("?action=open&id=series%3Aexample")
-        kodi.executebuiltin.assert_called_once_with("RunScript(script.silo,open,series:example)")
+        kodi.executebuiltin.assert_called_once_with("RunScript(script.founderstheater,open,series:example)")
 
     def test_unsafe_ids_are_encoded_and_round_trip(self):
         content_id = "movie:a,b (c)%"

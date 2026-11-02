@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <settings version="1">
-  <section id="script.silo">
+  <section id="script.founderstheater">
     <category id="connection" label="32000">
       <group id="1">
         <setting id="server_url" type="string" label="32001" help="32002">

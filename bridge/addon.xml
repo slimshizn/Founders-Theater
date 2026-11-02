@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.silo" name="Founders Theater (update helper)" version="0.9.0" provider-name="slimshizn">
+  <requires>
+    <import addon="xbmc.python" version="3.0.1" />
+    <import addon="script.founderstheater" version="0.9.0" />
+  </requires>
+  <extension point="xbmc.python.script" library="default.py" />
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Moves Founders Theater to its new add-on</summary>
+    <description lang="en_GB">Founders Theater now installs as its own add-on. This update helper brings it in, keeps your sign-in and settings, and passes old shortcuts and favourites on to it. Once Founders Theater opens normally, you can uninstall this helper.</description>
+    <lifecyclestate type="deprecated" lang="en_GB">Founders Theater has moved to a new add-on, which this update installs. You can uninstall this helper once Founders Theater opens normally.</lifecyclestate>
+    <license>AGPL-3.0-or-later</license>
+    <platform>all</platform>
+  </extension>
+</addon>

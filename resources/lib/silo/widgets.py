@@ -4,7 +4,7 @@ Kodi calls the plugin entry with ``argv = [base_url, handle, query]``. The root
 lists the profile's home sections plus Watchlist and Favorites as folders; each
 folder lists video items with full info tags and artwork. Selecting an item
 never resolves a stream here: it hands the content id to the main add-on with
-``RunScript(script.silo,play,<id>)`` (or ``open``), so playback keeps Silo's
+``RunScript(script.founderstheater,play,<id>)`` (or ``open``), so playback keeps Silo's
 progress reporting, resume and skip markers.
 
 The saved session (``session.json`` in the add-on profile folder, the

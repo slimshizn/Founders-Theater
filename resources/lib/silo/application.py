@@ -54,6 +54,7 @@ class Application:
             return
         if home is not None:
             home.setProperty("silo.running", "1")
+        self._migrate()
         try:
             self._run()
         except ApiError as exc:
@@ -69,6 +70,19 @@ class Application:
                 home.clearProperty("silo.running")
             if getattr(self, "_theme", None) is not None:
                 self._theme.close()
+
+    def _migrate(self):
+        """Copy sign-in and settings from script.silo once (migration.py).
+
+        The service normally does this when Kodi installs the add-on; if it is
+        still copying, wait briefly. A failure never stops the add-on opening.
+        """
+        from . import migration
+
+        try:
+            migration.run(xbmc, xbmcvfs, self.addon, wait_seconds=10)
+        except Exception:
+            xbmc.log("[Silo] Could not bring data over from script.silo", xbmc.LOGWARNING)
 
     def _profile_dir(self):
         return xbmcvfs.translatePath(self.addon.getAddonInfo("profile"))
@@ -1012,16 +1026,9 @@ class Application:
 
     def sync_keymap(self):
         """Add or remove the Menu-key keymap to match the device setting."""
-        from .keymap import sync
+        from .keymap import apply
 
-        folder = xbmcvfs.translatePath("special://userdata/keymaps/")
-        if not os.path.isabs(str(folder)):
-            return  # Not resolved by a real Kodi.
-        try:
-            if sync(folder, self.options().get("player_menu_key", True), self.addon.getAddonInfo("path")):
-                xbmc.executebuiltin("Action(reloadkeymaps)")
-        except OSError:
-            xbmc.log("[Silo] Could not update the player menu keymap", xbmc.LOGWARNING)
+        apply(xbmc, xbmcvfs, self.options().get("player_menu_key", True), self.addon.getAddonInfo("path"))
 
     @staticmethod
     def is_playable(item):

@@ -64,3 +64,15 @@ def sync(folder, enabled, addon_path):
         return False
     os.unlink(path)
     return True
+
+
+def apply(xbmc, xbmcvfs, enabled, addon_path):
+    """Write or remove the keymap in Kodi's userdata, reloading keymaps when it changed."""
+    folder = xbmcvfs.translatePath("special://userdata/keymaps/")
+    if not os.path.isabs(str(folder)):
+        return  # Not resolved by a real Kodi.
+    try:
+        if sync(folder, enabled, addon_path):
+            xbmc.executebuiltin("Action(reloadkeymaps)")
+    except OSError:
+        xbmc.log("[Silo] Could not update the player menu keymap", xbmc.LOGWARNING)

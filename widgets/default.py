@@ -2,14 +2,14 @@
 
 The widgets live in their own add-on so Founders Theater itself stays a single
 program in Kodi's add-on lists. The code, sign-in and settings all belong to
-Founders Theater (script.silo), which this add-on requires.
+Founders Theater (script.founderstheater), which this add-on requires.
 """
 
 import sys
 
 import xbmcaddon
 
-SILO = xbmcaddon.Addon("script.silo")
+SILO = xbmcaddon.Addon("script.founderstheater")
 sys.path.insert(0, SILO.getAddonInfo("path"))
 
 from resources.lib.silo.widgets import run  # noqa: E402

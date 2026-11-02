@@ -46,15 +46,15 @@ class BuildTests(unittest.TestCase):
             self.write(name)
         self.write("resources/lib/client.py", "VALUE = 1\n")
         archive_path = build.build_addon(self.root)
-        self.assertEqual(archive_path.name, "script.silo-{}.zip".format(self.version))
+        self.assertEqual(archive_path.name, "script.founderstheater-{}.zip".format(self.version))
         with zipfile.ZipFile(archive_path) as archive:
             names = archive.namelist()
-            self.assertIn("script.silo/addon.xml", names)
-            self.assertEqual(ET.fromstring(archive.read("script.silo/addon.xml")).get("provider-name"), "slimshizn")
-            self.assertIn("script.silo/default.py", names)
-            self.assertIn("script.silo/LICENSE", names)
-            self.assertIn("script.silo/resources/lib/client.py", names)
-            self.assertTrue(all(name.startswith("script.silo/") for name in names))
+            self.assertIn("script.founderstheater/addon.xml", names)
+            self.assertEqual(ET.fromstring(archive.read("script.founderstheater/addon.xml")).get("provider-name"), "slimshizn")
+            self.assertIn("script.founderstheater/default.py", names)
+            self.assertIn("script.founderstheater/LICENSE", names)
+            self.assertIn("script.founderstheater/resources/lib/client.py", names)
+            self.assertTrue(all(name.startswith("script.founderstheater/") for name in names))
             self.assertFalse(any("private data" in archive.read(name).decode("utf-8", errors="ignore") for name in names))
             self.assertEqual(names, sorted(names))
             self.assertIsNone(archive.testzip())
@@ -78,7 +78,7 @@ class BuildTests(unittest.TestCase):
 
     def test_manifest_cannot_change_the_archive_root_to_a_traversal_path(self):
         manifest = self.root / "addon.xml"
-        manifest.write_text(manifest.read_text().replace('id="script.silo"', 'id="../private"'), encoding="utf-8")
+        manifest.write_text(manifest.read_text().replace('id="script.founderstheater"', 'id="../private"'), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "id must"):
             build.build_addon(self.root)
 
@@ -89,7 +89,7 @@ class BuildTests(unittest.TestCase):
 
     def test_startup_service_is_packaged_and_required_when_declared(self):
         with zipfile.ZipFile(build.build_addon(self.root)) as archive:
-            self.assertIn("script.silo/service.py", archive.namelist())
+            self.assertIn("script.founderstheater/service.py", archive.namelist())
         (self.root / "service.py").unlink()
         with self.assertRaisesRegex(ValueError, "service.py"):
             build.build_addon(self.root)

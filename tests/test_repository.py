@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 from scripts.build import production_files
-from scripts.build_repository import DOWNLOAD_BASE, REPOSITORY_ID, build_repository, validate_repository
+from scripts.build_repository import BRIDGE_ID, DOWNLOAD_BASE, REPOSITORY_ID, _bridge, build_repository, validate_repository
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,7 +30,7 @@ class RepositoryTests(unittest.TestCase):
         self.repository_manifest = ET.parse(self.root / "repository" / REPOSITORY_ID / "addon.xml").getroot()
         self.addon_version = self.addon_manifest.get("version")
         self.repository_version = self.repository_manifest.get("version")
-        self.addon_filename = "script.silo-{}.zip".format(self.addon_version)
+        self.addon_filename = "script.founderstheater-{}.zip".format(self.addon_version)
         self.repository_filename = "{}-{}.zip".format(REPOSITORY_ID, self.repository_version)
         site = self.root / "site"
         site.mkdir()
@@ -43,7 +43,7 @@ class RepositoryTests(unittest.TestCase):
         catalog = ET.fromstring(contents)
         self.assertEqual(catalog.tag, "addons")
         self.assertEqual([(item.get("id"), item.get("version")) for item in catalog],
-                         [(REPOSITORY_ID, self.repository_version), ("script.silo", self.addon_version)])
+                         [(REPOSITORY_ID, self.repository_version), ("script.founderstheater", self.addon_version)])
         self.assertTrue(all(item.get("provider-name") == "slimshizn" for item in catalog))
         expected = hashlib.md5(contents, usedforsecurity=False).hexdigest()
         self.assertEqual(paths["checksum"].read_text(), expected + "\n")
@@ -57,7 +57,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(paths["repository_zip"].relative_to(self.output).as_posix(),
                          "zips/{}/{}".format(REPOSITORY_ID, self.repository_filename))
         self.assertEqual(paths["addon_zip"].relative_to(self.output).as_posix(),
-                         "zips/script.silo/{}".format(self.addon_filename))
+                         "zips/script.founderstheater/{}".format(self.addon_filename))
         self.assertEqual(paths["installer"].read_bytes(), paths["repository_zip"].read_bytes())
         with zipfile.ZipFile(paths["installer"]) as archive:
             self.assertEqual(archive.namelist(), [REPOSITORY_ID + "/LICENSE", REPOSITORY_ID + "/addon.xml"])
@@ -72,15 +72,15 @@ class RepositoryTests(unittest.TestCase):
             self.assertEqual(directory.findtext("hashes"), "sha256")
             self.assertIsNone(archive.testzip())
         with zipfile.ZipFile(paths["addon_zip"]) as archive:
-            self.assertIn("script.silo/default.py", archive.namelist())
-            self.assertTrue(all(name.startswith("script.silo/") for name in archive.namelist()))
+            self.assertIn("script.founderstheater/default.py", archive.namelist())
+            self.assertTrue(all(name.startswith("script.founderstheater/") for name in archive.namelist()))
             self.assertFalse(any("repository/" in name or "site/" in name or "tests/" in name or "docs/" in name for name in archive.namelist()))
         self.assertEqual(paths["landing_page"].read_bytes(), (self.root / "site/index.html").read_bytes())
         self.assertEqual((self.output / ".nojekyll").read_bytes(), b"")
 
     def test_two_builds_are_identical_and_preserve_older_packages(self):
         build_repository(self.root, self.output)
-        old = self.output / "zips/script.silo/script.silo-0.0.9.zip"
+        old = self.output / "zips/script.founderstheater/script.founderstheater-0.0.9.zip"
         old.write_bytes(b"older published package")
         snapshot = {path.relative_to(self.output): path.read_bytes() for path in self.output.rglob("*") if path.is_file()}
         build_repository(self.root, self.output)
@@ -109,10 +109,10 @@ class RepositoryTests(unittest.TestCase):
         tree.getroot().set("version", next_version)
         tree.write(manifest, encoding="utf-8", xml_declaration=True)
         next_release = build_repository(self.root, self.output)
-        self.assertEqual(next_release["addon_zip"].name, "script.silo-{}.zip".format(next_version))
+        self.assertEqual(next_release["addon_zip"].name, "script.founderstheater-{}.zip".format(next_version))
         self.assertEqual(first["addon_zip"].read_bytes(), old_package)
         catalog = ET.fromstring(next_release["index"].read_bytes())
-        self.assertEqual(catalog.find("addon[@id='script.silo']").get("version"), next_version)
+        self.assertEqual(catalog.find("addon[@id='script.founderstheater']").get("version"), next_version)
 
     def test_legacy_repository_definition_and_wrong_endpoints_are_rejected(self):
         path = self.root / "repository" / REPOSITORY_ID / "addon.xml"
@@ -149,7 +149,7 @@ class WidgetsAddonTests(unittest.TestCase):
             build_repository(ROOT, Path(folder))
             catalog = ET.parse(Path(folder) / "addons.xml").getroot()
             ids = sorted(addon.get("id") for addon in catalog)
-            self.assertEqual(ids, ["plugin.video.silotheater", REPOSITORY_ID, "script.silo"])
+            self.assertEqual(ids, ["plugin.video.silotheater", REPOSITORY_ID, "script.founderstheater", "script.silo"])
             widgets = catalog.find("addon[@id='plugin.video.silotheater']")
             package = Path(folder) / "zips/plugin.video.silotheater/plugin.video.silotheater-{}.zip".format(
                 widgets.get("version"))
@@ -157,12 +157,12 @@ class WidgetsAddonTests(unittest.TestCase):
                 self.assertEqual(sorted(archive.namelist()), [
                     "plugin.video.silotheater/LICENSE", "plugin.video.silotheater/addon.xml",
                     "plugin.video.silotheater/default.py"])
-            silo = catalog.find("addon[@id='script.silo']")
+            silo = catalog.find("addon[@id='script.founderstheater']")
             self.assertIsNone(silo.find("extension[@point='xbmc.python.pluginsource']"))
 
     def test_widgets_require_this_silo_theater_release(self):
         widgets = ET.parse(ROOT / "widgets/addon.xml").getroot()
-        required = widgets.find("requires/import[@addon='script.silo']").get("version")
+        required = widgets.find("requires/import[@addon='script.founderstheater']").get("version")
         current = ET.parse(ROOT / "addon.xml").getroot().get("version")
         version = lambda value: tuple(int(part) for part in value.split("."))
         self.assertLessEqual(version(required), version(current))
@@ -181,6 +181,72 @@ class WidgetsAddonTests(unittest.TestCase):
             (root / "addon.xml").write_text(manifest, encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "plugin source"):
                 validate_addon(root)
+
+
+class BridgeAddonTests(unittest.TestCase):
+    """script.silo ships as an update helper that brings in script.founderstheater."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.output = Path(self.temporary.name)
+        build_repository(ROOT, self.output)
+        self.catalog = ET.parse(self.output / "addons.xml").getroot()
+        self.bridge = self.catalog.find("addon[@id='script.silo']")
+        self.addon = self.catalog.find("addon[@id='script.founderstheater']")
+
+    def test_bridge_is_an_update_for_0_8_3_and_requires_this_release(self):
+        version = lambda value: tuple(int(part) for part in value.split("."))
+        self.assertGreater(version(self.bridge.get("version")), version("0.8.3"))
+        required = self.bridge.find("requires/import[@addon='script.founderstheater']")
+        self.assertEqual(required.get("version"), self.addon.get("version"))
+
+    def test_bridge_runs_no_service_and_is_marked_deprecated(self):
+        self.assertEqual(self.bridge.findall("extension[@point='xbmc.service']"), [])
+        self.assertEqual(self.bridge.find(".//lifecyclestate").get("type"), "deprecated")
+
+    def test_bridge_package_keeps_the_keymap_menu_script(self):
+        package = self.output / "zips/script.silo/script.silo-{}.zip".format(self.bridge.get("version"))
+        with zipfile.ZipFile(package) as archive:
+            self.assertEqual(sorted(archive.namelist()), [
+                "script.silo/LICENSE", "script.silo/addon.xml", "script.silo/default.py",
+                "script.silo/resources/player_menu.py"])
+            # Keymaps written by 0.8.3 run this path until the new add-on rewrites them.
+            self.assertEqual(archive.read("script.silo/resources/player_menu.py"),
+                             (ROOT / "resources/player_menu.py").read_bytes())
+
+    def test_bridge_must_require_the_current_release(self):
+        root = Path(self.temporary.name) / "source"
+        shutil.copytree(ROOT / "bridge", root / "bridge")
+        (root / "resources").mkdir()
+        shutil.copyfile(ROOT / "resources/player_menu.py", root / "resources/player_menu.py")
+        shutil.copyfile(ROOT / "LICENSE", root / "LICENSE")
+        with self.assertRaisesRegex(ValueError, "must require script.founderstheater 9.9.9"):
+            _bridge(root, {"id": "script.founderstheater", "version": "9.9.9"})
+        self.assertEqual(BRIDGE_ID, "script.silo")
+
+
+class BridgeForwardTests(unittest.TestCase):
+    def setUp(self):
+        import importlib.util
+        import sys
+        from types import SimpleNamespace
+
+        fake = SimpleNamespace(executebuiltin=lambda command: None)
+        sys.modules["xbmc"], saved = fake, sys.modules.get("xbmc")
+        self.addCleanup(lambda: sys.modules.__setitem__("xbmc", saved) if saved else sys.modules.pop("xbmc", None))
+        spec = importlib.util.spec_from_file_location("bridge_default", ROOT / "bridge/default.py")
+        self.bridge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.bridge)
+
+    def test_opening_the_old_id_opens_the_new_one(self):
+        self.assertEqual(self.bridge.forward(["default.py"]), "RunScript(script.founderstheater)")
+
+    def test_deep_links_pass_through_unchanged(self):
+        # Ids arrive percent-encoded (deeplink.run_script_builtin), so they never contain a comma.
+        self.assertEqual(self.bridge.forward(["default.py", "play", "movie:a%2Cb"]),
+                         "RunScript(script.founderstheater,play,movie:a%2Cb)")
+
 
 if __name__ == "__main__":
     unittest.main()

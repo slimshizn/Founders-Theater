@@ -33,7 +33,7 @@ class FakeWindow:
 
 
 KODI_MODULES = {
-    "xbmc": types.SimpleNamespace(Monitor=MagicMock, log=MagicMock(), LOGERROR=4),
+    "xbmc": types.SimpleNamespace(Monitor=MagicMock, log=MagicMock(), LOGINFO=1, LOGWARNING=2, LOGERROR=4),
     "xbmcaddon": types.SimpleNamespace(Addon=MagicMock),
     "xbmcgui": types.SimpleNamespace(WindowXML=FakeWindow, Dialog=MagicMock, ListItem=MagicMock,
                                      DialogProgress=MagicMock, INPUT_ALPHANUM=0, ALPHANUM_HIDE_INPUT=1),

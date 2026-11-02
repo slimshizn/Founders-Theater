@@ -88,8 +88,8 @@ def validate_addon(root: Path) -> Dict[str, str]:
         raise ValueError("addon.xml must have an <addon> root")
     addon_id = manifest.get("id", "")
     version = manifest.get("version", "")
-    if addon_id != "script.silo":
-        raise ValueError("The add-on id must be script.silo")
+    if addon_id != "script.founderstheater":
+        raise ValueError("The add-on id must be script.founderstheater")
     if not re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}", version):
         raise ValueError("The add-on version must be a numeric dotted version")
     if not manifest.get("name", "").strip():
@@ -113,7 +113,7 @@ def validate_addon(root: Path) -> Dict[str, str]:
     if manifest.findall("./extension[@point='xbmc.python.pluginsource']"):
         # A second role makes Kodi list the add-on twice; widgets ship in
         # their own add-on (widgets/) instead.
-        raise ValueError("script.silo must not declare a plugin source; widgets live in widgets/")
+        raise ValueError("script.founderstheater must not declare a plugin source; widgets live in widgets/")
     metadata = manifest.find("./extension[@point='xbmc.addon.metadata']")
     if metadata is None or metadata.findtext("license") != "AGPL-3.0-or-later":
         raise ValueError("The add-on license must be AGPL-3.0-or-later")

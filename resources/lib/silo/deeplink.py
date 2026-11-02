@@ -1,8 +1,8 @@
-"""Deep links into the add-on (``RunScript(script.silo,play,<id>)``); no Kodi imports."""
+"""Deep links into the add-on (``RunScript(script.founderstheater,play,<id>)``); no Kodi imports."""
 
 from urllib.parse import quote, unquote
 
-ADDON_ID = "script.silo"
+ADDON_ID = "script.founderstheater"
 DEEP_LINK_ACTIONS = ("play", "open")
 
 
@@ -12,7 +12,7 @@ def valid_id(value):
 
 
 def run_script_builtin(action, content_id):
-    """``RunScript(script.silo,<action>,<id>)``.
+    """``RunScript(script.founderstheater,<action>,<id>)``.
 
     Ordinary ids such as ``movie:example-2020`` pass unchanged; anything else
     (a comma, quote, parenthesis, space or ``%``) is percent-encoded so it

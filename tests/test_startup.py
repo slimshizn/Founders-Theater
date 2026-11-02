@@ -67,10 +67,15 @@ class Kodi:
         return startup.run(self.xbmc, self.xbmcgui, self.addon, clock=lambda: self.now)
 
 
-OPEN = "RunScript(script.silo)"
+OPEN = "RunScript(script.founderstheater)"
 
 
 class StartupTests(unittest.TestCase):
+    def test_startup_flag_keeps_its_script_silo_name(self):
+        # script.silo set this flag when Kodi started; the new add-on, installed
+        # mid-session by the bridge update, must see it and not open by itself.
+        self.assertEqual(startup.STARTED_PROPERTY, "script.silo.startup_handled")
+
     def test_off_by_default_never_opens(self):
         kodi = Kodi(settings={"open_on_start": ""})
         self.assertEqual(kodi.run(), "off")
