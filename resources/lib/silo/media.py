@@ -38,6 +38,47 @@ def default_version(item, mode="ask", preferred_file_id=None):
     return versions[0]
 
 
+def _resolution_class(version):
+    value = str((version or {}).get("resolution") or "").strip().lower()
+    return {"4k": "2160p", "uhd": "2160p", "fhd": "1080p", "hd": "720p", "sd": "480p"}.get(value, value)
+
+
+def _dynamic_range(version):
+    tracks = [track for track in (version or {}).get("video_tracks") or [] if isinstance(track, dict)]
+    kind = str((tracks[0].get("video_range_type") if tracks else "") or "").upper()
+    if "DOVI" in kind or "DOLBY" in kind:
+        return "dv"
+    if "HDR" in kind or "HLG" in kind or (version or {}).get("hdr") is True:
+        return "hdr"
+    return "sdr"
+
+
+def matching_version(previous, versions):
+    """The file_id of the version that continues ``previous`` on another episode, or None.
+
+    Silo's Android TV app hands the next episode the same choice: the version
+    with the same resolution class, preferring the same video codec, then the
+    same HDR or Dolby Vision kind, then the same container. Only one best
+    candidate counts; a tie or no version at that resolution returns None so
+    the usual file choice decides.
+    """
+    resolution = _resolution_class(previous)
+    if not resolution:
+        return None
+    candidates = [version for version in versions if _resolution_class(version) == resolution]
+
+    def rank(version):
+        return (str(version.get("codec_video") or "").lower() == str(previous.get("codec_video") or "").lower(),
+                _dynamic_range(version) == _dynamic_range(previous),
+                str(version.get("container") or "").lower() == str(previous.get("container") or "").lower())
+
+    if not candidates:
+        return None
+    best = max(rank(version) for version in candidates)
+    winners = [version for version in candidates if rank(version) == best]
+    return winners[0]["file_id"] if len(winners) == 1 else None
+
+
 def version_name(version):
     filename = version.get("file_name") or version.get("file_path")
     if filename:

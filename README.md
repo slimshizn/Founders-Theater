@@ -27,6 +27,7 @@
 - Plays original files directly, and has your server convert what your device can't play.
 - Choose the version, audio and subtitles before you press play. Your choices are saved to your Silo profile, so they follow you to the other Silo apps.
 - Skip Intro, Recap and Credits, Up next with a countdown, and Are you still watching?
+- Play next goes straight into the next episode in the same version and the quality you picked, and asks only when the episode doesn't have them.
 - A player menu on the remote's Menu key: info, stats, quality, speed, aspect, sleep timer, audio, subtitles (including online search, AI translation and sync) and chapters.
 - Lowers quality automatically when playback keeps buffering, and tests your connection speed.
 - Theme music on title pages.

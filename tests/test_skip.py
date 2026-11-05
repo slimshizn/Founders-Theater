@@ -65,10 +65,13 @@ class TrackerTests(unittest.TestCase):
 
 class Overlay:
     def __init__(self):
-        self.shown, self.choice, self.updates = None, None, []
+        self.shown, self.choice, self.updates, self.skips = None, None, [], []
 
     def show(self, *args, **kwargs):
         self.shown, self.kwargs = args, kwargs
+
+    def set_skip(self, label):
+        self.skips.append(label)
 
     def hide(self):
         self.shown = None
@@ -168,6 +171,27 @@ class ExtrasTests(unittest.TestCase):
         self.assertIsNone(extras.tick(3150, total=3210, now=60))
         self.next_card.choice = "play"
         self.assertEqual(extras.tick(3151, total=3210, now=61)["stop"], "next")
+
+    def test_credits_skip_moves_into_the_up_next_card(self):
+        extras = self.extras()
+        extras.tick(3080, total=3210, now=0)
+        extras.tick(3134, total=3210, now=1)  # credits start: skip offered, then the card
+        self.assertIsNone(self.skip.shown)  # the lone button never sits on the card
+        self.assertEqual(self.next_card.kwargs["skip"], "Skip Credits")
+        self.next_card.choice = "skip"
+        self.assertIsNone(extras.tick(3135, total=3210, now=2))
+        self.player.seekTime.assert_called_once_with(3202.0)
+        self.assertEqual(self.next_card.skips[-1], None)
+        self.assertIsNotNone(self.next_card.shown)  # Play next stays available
+
+    def test_hiding_the_card_during_the_credits_brings_back_the_skip_button(self):
+        extras = self.extras(auto_next=False)
+        extras.tick(3080, total=3210, now=0)
+        extras.tick(3134, total=3210, now=1)
+        self.assertIsNone(self.skip.shown)
+        self.next_card.choice = "dismiss"
+        extras.tick(3135, total=3210, now=2)
+        self.assertEqual(self.skip.shown, ("Skip Credits",))
 
     def test_movies_never_offer_up_next(self):
         extras = self.extras(item={"content_id": "movie-1", "type": "movie", "title": "Example"})
@@ -285,7 +309,8 @@ class StillWatchingAndLeadTests(unittest.TestCase):
         streak.count = 50
         extras = self.extras(streak, still_watching=0)
         self.reach_up_next(extras)
-        self.assertEqual(self.next_card.kwargs, {})
+        self.assertNotIn("still", self.next_card.kwargs)
+        self.assertEqual(self.next_card.kwargs["skip"], "Skip Credits")
         self.assertEqual(self.next_card.shown[1], 10.0)
 
     def test_menu_and_skip_button_reset_the_count(self):
@@ -443,6 +468,28 @@ class KeymapTests(unittest.TestCase):
 
     def test_paths_are_escaped(self):
         self.assertIn("A&amp;B", keymap.keymap_xml("C:\\A&B\\script.silo"))
+
+
+
+class UpNextWindowTests(unittest.TestCase):
+    SKIN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "skins",
+                        "Default", "1080i")
+
+    def parse(self, name):
+        import xml.etree.ElementTree as ET
+        return ET.parse(os.path.join(self.SKIN, name)).getroot()
+
+    def test_play_skip_credits_and_hide_share_one_packed_row(self):
+        row = next(node for node in self.parse("SiloUpNext.xml").iter("control") if node.get("type") == "grouplist")
+        buttons = [node.get("id") for node in row.findall("control")]
+        self.assertEqual(buttons, ["200", "202", "201"])
+        skip = row.find("control[@id='202']")
+        self.assertIn("silo.next_skip", skip.findtext("visible"))
+
+    def test_the_transition_card_takes_focus(self):
+        root = self.parse("SiloNextTransition.xml")
+        self.assertEqual(root.findtext("defaultcontrol"), "100")
+        self.assertIsNotNone(root.find(".//control[@id='100'][@type='button']"))
 
 
 if __name__ == "__main__":

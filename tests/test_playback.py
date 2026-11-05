@@ -1881,6 +1881,57 @@ class ConvertedControllerTests(KodiHarness):
         self.assertEqual(self.fake_extras.interactions, 2)
 
 
+
+class PlayNextQualityTests(unittest.TestCase):
+    """A quality picked during an episode carries to the next; a missing one is asked for."""
+
+    PLAN = {"available_qualities": [{"label": "1080p-medium", "display_name": "1080p Medium"},
+                                    {"label": "720p-high", "display_name": "720p High"}]}
+
+    def offer(self, wanted, chosen):
+        controller = PlaybackController(SimpleNamespace(), SimpleNamespace(getAddonInfo=lambda key: ""))
+        session = SimpleNamespace(quality_preference=wanted, replans=[])
+
+        def replan(operation, position=None, quality=None, client=None):
+            session.replans.append((operation, position, quality))
+            return {"replanned": quality}
+
+        session.replan = replan
+        asked = []
+
+        class Dialog:
+            def select(self, heading, labels):
+                asked.append((heading, labels))
+                return chosen
+
+        logs = []
+        with patch.dict(sys.modules, {"xbmcgui": SimpleNamespace(Dialog=Dialog)}):
+            plan = controller._offer_quality(session, dict(self.PLAN), wanted, 0.0, logs.append)
+        return controller, session, plan, asked, logs
+
+    def test_an_offered_quality_carries_without_asking(self):
+        controller, session, plan, asked, _ = self.offer("720p-high", chosen=0)
+        self.assertEqual(asked, [])
+        self.assertEqual(controller.quality_choice, "720p-high")
+        self.assertEqual(session.replans, [])
+
+    def test_a_missing_quality_is_chosen_before_the_stream_opens(self):
+        controller, session, plan, asked, logs = self.offer("2160p-high", chosen=1)
+        heading, labels = asked[0]
+        self.assertEqual(heading, "4K High isn't available for this episode")
+        self.assertEqual(labels, ["Auto", "1080p Medium", "720p High"])
+        self.assertEqual(session.replans, [("quality_change", 0.0, "1080p-medium")])
+        self.assertEqual(plan, {"replanned": "1080p-medium"})
+        self.assertEqual(controller.quality_choice, "1080p-medium")
+
+    def test_auto_or_back_keeps_the_plan_and_stops_carrying(self):
+        for chosen in (0, -1):
+            controller, session, plan, asked, _ = self.offer("2160p-high", chosen=chosen)
+            self.assertEqual(session.replans, [])
+            self.assertEqual(plan, self.PLAN)
+            self.assertEqual((controller.quality_choice, session.quality_preference), ("auto", "auto"))
+
+
 if __name__ == "__main__":
     unittest.main()
 

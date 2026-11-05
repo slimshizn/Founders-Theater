@@ -1,7 +1,10 @@
 """Small windows drawn over playing video: the skip button and Up next.
 
 Up next doubles as "Are you still watching?": the same card, without a
-countdown, whose buttons read Continue and Stop.
+countdown, whose buttons read Continue and Stop. While it shows over the end
+credits it also carries Skip credits, so one card holds all three buttons
+instead of the skip button overlapping it. NextTransition covers the screen
+while Play next hands over to the following episode.
 """
 
 import xbmc
@@ -111,11 +114,25 @@ class UpNextCard(_Overlay):
         # (handled in onAction) only hides the card.
         if control_id == 201 and self.still:
             return "stop"
+        if control_id == 202:
+            return "skip"
         return super().choice_for(control_id)
 
-    def show(self, episode, seconds=None, still=False):
+    def _choose(self, choice):
+        if choice == "skip":
+            self.choice = choice  # Skip credits keeps the card up.
+            return
+        super()._choose(choice)
+
+    def set_skip(self, label):
+        """Offer Skip credits in the card (``None`` removes the button)."""
+        if self.window is not None:
+            self.window.setProperty("silo.next_skip", "" if self.still or not label else str(label))
+
+    def show(self, episode, seconds=None, still=False, skip=None):
         self.still = bool(still)
         self._show({"silo.next_heading": "STILL WATCHING?" if still else "UP NEXT",
+                    "silo.next_skip": "" if still or not skip else skip,
                     "silo.next_eyebrow": episode.get("eyebrow", ""),
                     "silo.next_title": episode.get("title", ""),
                     "silo.next_thumb": episode.get("thumb", ""),
@@ -132,3 +149,29 @@ class UpNextCard(_Overlay):
         if seconds is None:
             return ""
         return "Playing in {}".format(max(0, int(seconds)))
+
+
+class NextTransition(_Overlay):
+    """A black card while Play next hands over to the next episode.
+
+    It hides the add-on's own screens between the two playbacks. Back
+    cancels the hand-over (``cancelled``); every other key is ignored.
+    """
+
+    XML = "SiloNextTransition.xml"
+
+    def __init__(self, addon_path):
+        super().__init__(addon_path)
+        self.cancelled = False
+
+    def choice_for(self, control_id):
+        return "ignore"
+
+    def _choose(self, choice):
+        if choice == "dismiss":
+            self.cancelled = True
+            self.hide()
+
+    def show(self, episode):
+        self._show({"silo.next_eyebrow": episode.get("eyebrow", ""),
+                    "silo.next_title": episode.get("title", "")}, 100)

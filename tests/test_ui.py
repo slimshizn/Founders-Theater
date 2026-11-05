@@ -458,6 +458,62 @@ class ApplicationFlowTests(unittest.TestCase):
         second = controller.return_value.play.call_args_list[1].kwargs
         self.assertEqual((second["file_id"], second["start_position"]), ("file-b", 1234.5))
 
+    def test_play_next_keeps_version_and_picked_quality_and_starts_from_the_beginning(self):
+        def episode(content_id, *versions):
+            return {"content_id": content_id, "type": "episode", "title": content_id, "versions": list(versions),
+                    "user_data": {"position_seconds": 600, "duration_seconds": 1800}}
+        hd = {"file_id": "hd", "resolution": "1080p", "codec_video": "hevc", "hdr": False}
+        dv = {"file_id": "dv", "resolution": "2160p", "codec_video": "hevc",
+              "video_tracks": [{"video_range_type": "DOVIWithHDR10"}]}
+        first = episode("episode:1", dict(hd), dict(dv))
+        second = episode("episode:2", dict(hd, file_id="next-hd"), dict(dv, file_id="next-dv"))
+        self.app.client.item.side_effect = lambda content_id, **params: second if content_id == "episode:2" else first
+        order, cover = [], MagicMock(cancelled=False)
+        self.app._theme = MagicMock()
+        self.app._theme.resume.side_effect = lambda: order.append("theme resumed")
+        actions = iter([{"stop": "next", "item": {"content_id": "episode:2"}}, None])
+        with patch.object(application_module, "PlaybackController") as controller:
+            type(controller.return_value).next_action = property(lambda self: next(actions))
+            controller.return_value.quality_choice = "720p-high"
+            controller.return_value.transition = cover
+            controller.return_value.play.side_effect = lambda *args, **kwargs: order.append("play")
+            self.app.play(first, resume=False, file_id="dv")
+        nxt = controller.return_value.play.call_args_list[1]
+        self.assertEqual(nxt.args[0]["content_id"], "episode:2")
+        self.assertEqual(nxt.kwargs["file_id"], "next-dv")  # same 4K Dolby Vision version, no prompt
+        self.assertEqual(nxt.kwargs["start_position"], 0.0)  # from the beginning, no resume prompt
+        self.assertEqual(nxt.kwargs["options"]["carried_quality"], "720p-high")
+        self.assertIs(nxt.kwargs["transition"], cover)
+        self.assertEqual(order[:2], ["play", "play"])  # theme music stays quiet between episodes
+        cover.hide.assert_called()
+        self.app.dialog.select.assert_not_called()
+
+    def test_back_on_the_transition_cancels_play_next(self):
+        episode = dict(movie_item(), content_id="episode:1", type="episode")
+        actions = iter([{"stop": "next", "item": {"content_id": "episode:2"}}, None])
+        with patch.object(application_module, "PlaybackController") as controller:
+            type(controller.return_value).next_action = property(lambda self: next(actions))
+            controller.return_value.transition = MagicMock(cancelled=True)
+            controller.return_value.quality_choice = None
+            self.app.play(episode, resume=False)
+        self.assertEqual(controller.return_value.play.call_count, 1)
+
+    def test_play_next_without_a_matching_version_uses_the_usual_choice(self):
+        first = dict(movie_item(multiple=True), content_id="episode:1", type="episode")
+        same = {"resolution": "720p"}
+        second = dict(first, content_id="episode:2",
+                      versions=[dict(same, file_id="one"), dict(same, file_id="two")])
+        self.app.client.item.side_effect = lambda content_id, **params: second if content_id == "episode:2" else first
+        self.app.choose_file = MagicMock(return_value="two")
+        actions = iter([{"stop": "next", "item": {"content_id": "episode:2"}}, None])
+        with patch.object(application_module, "PlaybackController") as controller:
+            type(controller.return_value).next_action = property(lambda self: next(actions))
+            controller.return_value.quality_choice = None
+            self.app.play(first, resume=False, file_id="file-a")
+        self.app.choose_file.assert_called_once()
+        self.assertEqual(controller.return_value.play.call_args_list[1].kwargs["file_id"], "two")
+        self.assertNotIn("carried_quality", controller.return_value.play.call_args_list[1].kwargs["options"])
+
     def test_update_profile_merges_server_answer(self):
         self.app.profile = {"id": "p", "name": "Example", "auto_skip_intro": False}
         self.app.client.update_profile.return_value = {"id": "p", "name": "Example", "auto_skip_intro": True}

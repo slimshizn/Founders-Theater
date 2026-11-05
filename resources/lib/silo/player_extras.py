@@ -203,6 +203,8 @@ class PlaybackExtras:
         self.still = False
         self.offset = _number((self.plan.get("timeline") or {}).get("timeline_offset_seconds")) or 0.0
         self.tracker = self._tracker()
+        # The skip label on offer now; Up next carries it while its card shows.
+        self.skip_offer = None
         self.next_item = None
         self.next_state = "pending" if item.get("type") == "episode" else "none"
         self.countdown_until = None
@@ -245,6 +247,8 @@ class PlaybackExtras:
             choice = self.skip_button.take_choice()
             if choice:
                 self.interaction()
+            if choice in ("skip", "dismiss"):
+                self.skip_offer = None
             if choice == "skip":
                 span = self.tracker.dismiss()
                 if span:
@@ -256,15 +260,31 @@ class PlaybackExtras:
         if decision is None:
             return
         kind, span = decision
-        if kind == "show" and self.skip_button is not None:
-            self.skip_button.show(LABELS[span["kind"]])
-        elif kind == "hide" and self.skip_button is not None:
-            self.skip_button.hide()
+        if kind == "show":
+            self.skip_offer = LABELS[span["kind"]]
+            if self._card_up():
+                self.up_next.set_skip(self.skip_offer)
+            elif self.skip_button is not None:
+                self.skip_button.show(self.skip_offer)
+        elif kind == "hide":
+            self.skip_offer = None
+            if self._card_up():
+                self.up_next.set_skip(None)
+            if self.skip_button is not None:
+                self.skip_button.hide()
         elif kind == "skip":
             self._seek(span, total)
             self.notify(DONE_LABELS[span["kind"]])
 
     # ------------------------------------------------------------- up next
+
+    def _card_up(self):
+        return self.next_state == "shown" and self.up_next is not None
+
+    def _restore_skip(self):
+        """Up next went away during the credits: the lone skip button returns."""
+        if self.skip_offer and self.skip_button is not None:
+            self.skip_button.show(self.skip_offer)
 
     def _up_next_start(self, total):
         credits = next((span for span in segments(self.version, self.offset) if span["kind"] == "credits"), None)
@@ -299,11 +319,16 @@ class PlaybackExtras:
             self.still = bool(auto and self.still_after and self.streak.count >= self.still_after)
             auto = auto and not self.still
             self.countdown_until = now + COUNTDOWN_SECONDS if auto else None
+            # One card holds Play, Skip credits and Hide: the lone skip button
+            # would sit on top of it and take the remote's focus.
+            if self.skip_button is not None:
+                self.skip_button.hide()
             if self.still:
                 self.log("still_watching", position)
                 self.up_next.show(self._next_card(self.next_item), None, still=True)
             else:
-                self.up_next.show(self._next_card(self.next_item), COUNTDOWN_SECONDS if auto else None)
+                self.up_next.show(self._next_card(self.next_item), COUNTDOWN_SECONDS if auto else None,
+                                  skip=self.skip_offer)
             self.next_state = "shown"
             return None
         if self.next_state == "shown":
@@ -322,12 +347,23 @@ class PlaybackExtras:
                 self.next_state = "done"
                 self.interaction()
                 return {"stop": "still_watching"}
+            if choice == "skip":
+                # Skip credits from the card: the card stays up for Play next.
+                self.interaction()
+                self.skip_offer = None
+                self.up_next.set_skip(None)
+                span = self.tracker.dismiss()
+                if span:
+                    self._seek(span, total)
+                return None
             if choice == "dismiss":
                 self.interaction()
                 self.next_state = "done"
+                self._restore_skip()
             elif position < start - 1:
                 self.up_next.hide()
                 self.next_state = "ready"  # Seeked back before the credits.
+                self._restore_skip()
             elif self.countdown_until is not None:
                 self.up_next.update(self.countdown_until - now)
         return None

@@ -196,7 +196,7 @@ def _bandwidth_cap(options):
 class PlaybackSession:
     """Synchronous session core, independent of Kodi and exercised offline."""
 
-    def __init__(self, client, mode="auto", version="0.9.3", options=None):
+    def __init__(self, client, mode="auto", version="0.9.4", options=None):
         self.client, self.mode, self.version = client, mode, version
         self.options = dict(options or {})
         # /api/v2 calls this installation_id, but it identifies the SERVER.
@@ -784,6 +784,15 @@ def plan_duration(plan):
     return duration - offset if duration > offset else None
 
 
+def quality_name(label):
+    """The menu name of a quality rung id, as the server shows it: 2160p-high is 4K High."""
+    if label == "original":
+        return "Original"
+    resolution, _, level = str(label).partition("-")
+    resolution = "4K" if resolution == "2160p" else resolution
+    return " ".join(part for part in (resolution, level.capitalize()) if part)
+
+
 class PlaybackController:
     """Poll Kodi locally while a separate worker reports server progress."""
 
@@ -811,6 +820,11 @@ class PlaybackController:
         self.remember_audio = None
         # Builds the loopback relay for media the server serves itself.
         self.relay_factory = None
+        # Play next: the card that covers the hand-over (ui_overlay.NextTransition),
+        # and the quality the viewer picked (None: the profile default), which
+        # the next episode keeps.
+        self.transition = None
+        self.quality_choice = None
 
     def _extras(self, player, item, plan, options, file_id, log_event, seek=None, ai_enabled=None):
         """Overlays for this playback, or None where Kodi cannot draw them."""
@@ -840,6 +854,53 @@ class PlaybackController:
             log=lambda event, position=None: log_event(event, position),
             streak=self.streak, seek=seek, ai_enabled=ai_enabled)
 
+    def _show_transition(self, item, log_event):
+        """Cover the screen from Play next until the next episode starts."""
+        try:
+            from . import present
+            from .ui_overlay import NextTransition
+
+            card = NextTransition(self.addon.getAddonInfo("path"))
+            item = item if isinstance(item, dict) else {}
+            card.show({"eyebrow": present.episode_code(item, ":"), "title": str(item.get("title") or "")})
+            return card
+        except Exception:  # A cover is a nicety: Play next works without it.
+            log_event("transition_unavailable")
+            return None
+
+    def _offer_quality(self, session, plan, wanted, position, log_event):
+        """Keep the quality carried from the previous episode, or let the viewer pick.
+
+        A rung this episode does not publish comes back as Auto (the server
+        normalizes it), so the viewer chooses before the stream opens.
+        """
+        import xbmcgui
+        from .player_extras import quality_options
+
+        offered = quality_options(plan)
+        if not offered or wanted in [entry["value"] for entry in offered]:
+            self.quality_choice = wanted
+            return plan
+        heading = "{} isn't available for this episode".format(quality_name(wanted))
+        choices = [("auto", "Auto")] + [(entry["value"], entry["label"]) for entry in offered]
+        try:
+            chosen = xbmcgui.Dialog().select(heading, [label for _, label in choices])
+        except (AttributeError, RuntimeError):
+            chosen = -1
+        value = choices[chosen][0] if isinstance(chosen, int) and 0 <= chosen < len(choices) else "auto"
+        session.quality_preference = "auto"
+        self.quality_choice = "auto"
+        if value == "auto":
+            log_event("quality_unavailable_auto")
+            return plan
+        try:
+            plan = session.replan("quality_change", position=position or 0.0, quality=value, client=self.client)
+            self.quality_choice = value
+            log_event("quality_unavailable_chose")
+        except (PlaybackError, ApiError, OSError):
+            log_event("quality_unavailable_replan_failed")
+        return plan
+
     def _save_subtitle(self, artifact, log_event):
         """Download a sidecar with the add-on's own headers; return a local path.
 
@@ -868,8 +929,12 @@ class PlaybackController:
             log_event("subtitle_unavailable", error=error if isinstance(error, ApiError) else None)
             return None
 
-    def play(self, item, start_position=None, file_id=None, options=None, exact_start=False):
+    def play(self, item, start_position=None, file_id=None, options=None, exact_start=False, transition=None):
         """Play ``item``; ``start_position`` is source seconds (None = server resume).
+
+        ``transition`` is the Play next card still covering the screen; it
+        closes once this episode starts, and Back on it cancels the start.
+        ``options["carried_quality"]`` is the quality the previous episode used.
 
         A saved resume point is backed up by ``options["resume_rewind"]``
         seconds unless ``exact_start`` says the position is a deliberate one
@@ -974,6 +1039,8 @@ class PlaybackController:
         pending_reanchor = []
         self.next_action = None
         self.last_progress_error = None
+        self.transition = None
+        self.quality_choice = None
 
         def start_reporter():
             clone = getattr(self.client, "reporting_client", None)
@@ -1305,12 +1372,20 @@ class PlaybackController:
             log_event("begin_v" + (version or "unknown"))
             plan = session.start(str(file_id) if file_id is not None else select_file(item), start_position)
             log_event("plan_ready", session.position)
+            carried = str(options.get("carried_quality") or "auto")
+            if carried != "auto":
+                plan = self._offer_quality(session, plan, carried, start_position, log_event)
+            if transition is not None and transition.cancelled is True:
+                log_event("up_next_cancelled")
+                return
             reporter = start_reporter()
             reporter.hold()  # Kodi may take up to a minute to open a converted stream.
             try:
                 outcome = open_plan(plan)
             finally:
                 reporter.release()
+                if transition is not None:
+                    transition.hide()
             if outcome != "started":
                 return
             stage = "polling"
@@ -1451,13 +1526,19 @@ class PlaybackController:
                     xbmc.executebuiltin("ActivateWindow({})".format(command["native"]))
                 elif command and command.get("stop"):
                     self.next_action = command
+                    if command["stop"] == "next":
+                        # Covers the add-on's screens until the next episode plays.
+                        self.transition = self._show_transition(command.get("item"), log_event)
                     log_event("stop_for_" + command["stop"], current)
                     stop_local()
                     break
                 elif command and command.get("screen"):
                     run_screen(command)
                 elif command and command.get("replan") == "quality":
-                    if switch("quality_change", quality=command.get("quality")) not in (None, "started"):
+                    changed = switch("quality_change", quality=command.get("quality"))
+                    if changed == "started":
+                        self.quality_choice = str(command.get("quality") or "auto")
+                    elif changed is not None:
                         break
                 elif command and command.get("replan") == "track":
                     if switch("track_change", audio_index=command.get("audio_index")) not in (None, "started"):
@@ -1503,6 +1584,8 @@ class PlaybackController:
             if not already_finished:
                 xbmcgui.Dialog().ok("Silo — playback", "Kodi could not finish setting up this playback.")
         finally:
+            if transition is not None:
+                transition.hide()
             if extras is not None:
                 extras.close()
             stop_local()

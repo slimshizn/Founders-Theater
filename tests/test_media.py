@@ -3,9 +3,42 @@
 import unittest
 
 from resources.lib.silo.media import (
-    available_versions, default_version, format_time, is_multipart,
+    available_versions, default_version, format_time, is_multipart, matching_version,
     resume_position, subtitle_choices, version_label, version_name,
 )
+
+
+def version(file_id, resolution, codec="hevc", range_type="SDR", container="mkv"):
+    return {"file_id": file_id, "resolution": resolution, "codec_video": codec, "container": container,
+            "hdr": range_type != "SDR", "video_tracks": [{"video_range_type": range_type}]}
+
+
+class MatchingVersionTests(unittest.TestCase):
+    """Play next keeps the version as Silo's Android TV app does (EpisodeSelectionHandoff)."""
+
+    def test_same_resolution_and_kind_continue(self):
+        played = version("a", "2160p", range_type="DOVIWithHDR10")
+        following = [version("x", "1080p"), version("y", "2160p", range_type="DOVIWithHDR10"),
+                     version("z", "2160p", range_type="HDR10")]
+        self.assertEqual(matching_version(played, following), "y")
+        self.assertEqual(matching_version(version("a", "1080p"), following), "x")
+
+    def test_codec_then_range_then_container_break_ties(self):
+        played = version("a", "1080p", codec="h264", container="mp4")
+        following = [version("x", "1080p", codec="hevc", container="mp4"),
+                     version("y", "1080p", codec="h264", container="mkv")]
+        self.assertEqual(matching_version(played, following), "y")
+
+    def test_no_single_best_or_no_same_resolution_asks_the_usual_way(self):
+        played = version("a", "1080p")
+        self.assertIsNone(matching_version(played, [version("x", "1080p"), version("y", "1080p")]))
+        self.assertIsNone(matching_version(played, [version("x", "720p"), version("y", "2160p")]))
+        self.assertIsNone(matching_version({}, [version("x", "1080p")]))
+
+    def test_resolution_aliases_and_hdr_flag(self):
+        played = {"file_id": "a", "resolution": "4K", "hdr": True}
+        self.assertEqual(matching_version(played, [version("x", "2160p"), version("y", "2160p", range_type="HDR10")]),
+                         "y")
 
 
 class SubtitleChoiceTests(unittest.TestCase):

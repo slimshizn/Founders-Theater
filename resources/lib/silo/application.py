@@ -13,7 +13,8 @@ import xbmcvfs
 
 from .api import ApiError, SiloClient
 from .auth import AuthController, DeviceAuthCancelled, DeviceAuthExpired, NATIVE_PROVIDER_ID
-from .media import available_versions, default_version, format_time, is_multipart, resume_position, version_label, version_name
+from .media import (available_versions, default_version, format_time, is_multipart, matching_version,
+                    resume_position, version_label, version_name)
 from .playback import PlaybackController
 from . import present, track_prefs
 from .present import avatar_image, video_items
@@ -761,7 +762,7 @@ class Application:
         self._after_playback_item = (self._playback_item_key(item, file_id), detail)
 
     def play(self, item, resume=None, file_id=None, subtitle_index=AUTO, start_at=None, auto_next=True,
-             audio_index=AUTO):
+             audio_index=AUTO, quality=None, transition=None):
         """Generic Play follows preferences; explicit Resume/Start keeps its intent.
 
         Return the chosen file so the detail screen can retain it after refresh.
@@ -769,6 +770,9 @@ class Application:
         ``subtitle_index`` is a playback subtitle ordinal, None for Off, or AUTO
         to use the remembered choice or the profile's subtitle preferences.
         ``audio_index`` is an audio ordinal picked on the details screen, or AUTO.
+        ``quality`` is a quality the viewer picked during the previous episode
+        and ``transition`` the Play next card still covering the screen
+        (see _play_up_next).
         """
         if not self.is_playable(item):
             return None
@@ -779,6 +783,8 @@ class Application:
         if not auto_next:
             # Shuffle and extras pick what plays next themselves.
             options["auto_next"] = False
+        if isinstance(quality, str) and quality:
+            options["quality_preference"] = options["carried_quality"] = quality
         version = default_version(item, options["file_selection"], file_id)
         if not version:
             self.dialog.ok("Silo", "No media files are available for this title.")
@@ -827,10 +833,14 @@ class Application:
             theme.suspend()
         try:
             controller.play(selected_item, start_position=start_position, file_id=file_id, options=options,
-                            exact_start=start_at is not None)
+                            exact_start=start_at is not None, transition=transition)
         finally:
             self._cache_playback_item(selected_item, file_id, getattr(controller, "last_result", None))
-            if theme is not None:
+            action = getattr(controller, "next_action", None)
+            playing_next = (isinstance(action, dict) and action.get("stop") == "next" and bool(action.get("item"))
+                            and auto_next)
+            # Theme music stays quiet between episodes; the last one resumes it.
+            if theme is not None and not playing_next:
                 theme.resume()
         try:
             from .widgets import clear_cache
@@ -839,15 +849,45 @@ class Application:
         except Exception:
             pass
         self.last_playback_result = getattr(controller, "last_result", None)
-        action = getattr(controller, "next_action", None)
         if isinstance(action, dict) and action.get("stop") == "version":
             # The player menu switched files: continue on the new one where playback was.
             self.play(selected_item, resume=True, file_id=action["file_id"], subtitle_index=subtitle_index,
                       start_at=action.get("position"), auto_next=auto_next)
-        elif isinstance(action, dict) and action.get("stop") == "next" and action.get("item") and auto_next:
-            # Up next: open the episode fresh so its files, markers and progress are current.
-            self.play(self.client.item(action["item"]["content_id"]), resume=True)
+        elif playing_next:
+            try:
+                self._play_up_next(action["item"], selected_version, controller)
+            finally:
+                if theme is not None:
+                    theme.resume()
         return file_id
+
+    def _play_up_next(self, card, previous_version, controller):
+        """Play next: start the following episode as Silo's own apps do.
+
+        It starts from the beginning in the version that matches the one just
+        played (same resolution, then video codec, HDR kind and container;
+        media.matching_version), with the quality the viewer picked during the
+        episode. Without one matching version the usual file choice asks; a
+        quality this episode does not offer is asked for before it plays. The
+        episode is read fresh, so its files, markers and progress are current.
+        """
+        transition = getattr(controller, "transition", None)
+        if transition is not None and not callable(getattr(transition, "hide", None)):
+            transition = None
+        try:
+            if transition is not None and transition.cancelled is True:
+                return None
+            if transition is not None:
+                # Kodi may close dialogs when its player stops; show the cover again.
+                transition.show({"eyebrow": present.episode_code(card, ":"), "title": str(card.get("title") or "")})
+            item = self.client.item(card["content_id"])
+            file_id = matching_version(previous_version or {}, available_versions(item))
+            quality = getattr(controller, "quality_choice", None)
+            return self.play(item, resume=False, file_id=file_id,
+                             quality=quality if isinstance(quality, str) else None, transition=transition)
+        finally:
+            if transition is not None:
+                transition.hide()
 
     # ---------------------------------------------------------- tracks
 
