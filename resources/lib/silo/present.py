@@ -318,3 +318,16 @@ def avatar_image(url):
     elif path.lower().endswith(".svg"):
         return ""
     return urlunsplit((parts.scheme, parts.netloc, path, parts.query, ""))
+
+
+def is_unwatched(item):
+    """An episode nobody on this profile has started (Android's spoiler rule)."""
+    data = item.get("user_data") if isinstance(item.get("user_data"), dict) else {}
+    state = item.get("user_state") if isinstance(item.get("user_state"), dict) else {}
+    if data.get("played") is True or state.get("played") is True or data.get("is_in_progress") is True:
+        return False
+    position = data.get("position_seconds", item.get("position_seconds"))
+    try:
+        return float(position or 0) <= 0
+    except (TypeError, ValueError):
+        return True

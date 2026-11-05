@@ -172,6 +172,29 @@ class ExtrasTests(unittest.TestCase):
         self.next_card.choice = "play"
         self.assertEqual(extras.tick(3151, total=3210, now=61)["stop"], "next")
 
+    def card(self, **options):
+        extras = self.extras(**options)
+        extras.item = dict(EPISODE, series_backdrop_url="series-art", backdrop_url="episode-art")
+        extras.image = lambda item, kind: item.get(kind + "_url") or ""
+        return extras
+
+    def test_up_next_shows_the_next_episodes_still(self):
+        extras = self.card()
+        self.assertEqual(extras._next_card({"still_url": "still-2", "season_number": 1})["thumb"], "still-2")
+
+    def test_up_next_falls_back_to_the_series_backdrop(self):
+        extras = self.card()
+        self.assertEqual(extras._next_card({"season_number": 1})["thumb"], "series-art")
+        extras.item = dict(EPISODE, backdrop_url="episode-art")
+        self.assertEqual(extras._next_card({})["thumb"], "episode-art")
+
+    def test_hidden_spoilers_keep_an_unwatched_episodes_still_off_the_card(self):
+        extras = self.card(hide_spoilers=True)
+        unwatched = {"still_url": "still-2", "user_data": {"position_seconds": 0}}
+        self.assertEqual(extras._next_card(unwatched)["thumb"], "series-art")
+        started = {"still_url": "still-2", "user_data": {"position_seconds": 120}}
+        self.assertEqual(extras._next_card(started)["thumb"], "still-2")
+
     def test_credits_skip_moves_into_the_up_next_card(self):
         extras = self.extras()
         extras.tick(3080, total=3210, now=0)

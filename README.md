@@ -18,6 +18,7 @@
 **Browse**
 - Home rows in your server's order, with a hero that follows the title you focus. Reorder or hide rows.
 - Movies and Series grids with library, sort in either direction, filters and an A–Z jump, plus each library's Recommended rows and Collections.
+- Rest on Movies, Series or For You for a menu: pick a library, then Recommended, Browse or Collections; or Recommendations, Favorites, Watchlist and History.
 - For You, Calendar, Watchlist, Favorites, History, and Requests when your server offers them.
 - Search with people, and person pages with their filmography.
 - Title pages with seasons and episodes, cast, trailers and extras, related titles and the full synopsis.

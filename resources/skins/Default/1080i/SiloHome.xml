@@ -6858,25 +6858,251 @@
         <onright>612</onright>
       </control>
     </control>
-    <control type="group" id="640">
+    <control type="group" id="645">
       <left>0</left>
       <top>128</top>
-      <width>320</width>
-      <height>240</height>
-      <visible>!String.IsEmpty(Window.Property(silo.pill))</visible>
-      <control type="image" id="641">
+      <width>652</width>
+      <height>600</height>
+      <animation effect="fade" start="0" end="100" time="180" delay="350">Visible</animation>
+      <animation effect="fade" start="100" end="0" time="120">Hidden</animation>
+      <visible>[Control.HasFocus(211) + String.IsEqual(Window.Property(silo.panel),movie)] | [Control.HasFocus(212) + String.IsEqual(Window.Property(silo.panel),series)] | ControlGroup(645).HasFocus()</visible>
+      <control type="group">
         <left>0</left>
         <top>0</top>
-        <width>320</width>
-        <height>240</height>
+        <width>340</width>
+        <height>600</height>
+        <visible>String.IsEmpty(Window.Property(silo.panel_single))</visible>
+        <control type="image" id="646">
+          <left>0</left>
+          <top>0</top>
+          <width>340</width>
+          <height>312</height>
+          <texture border="24">panel.png</texture>
+        </control>
+        <control type="list" id="650">
+          <left>12</left>
+          <top>16</top>
+          <width>316</width>
+          <height>280</height>
+          <orientation>vertical</orientation>
+          <scrolltime>120</scrolltime>
+          <onright>660</onright>
+          <ondown>659</ondown>
+          <itemlayout height="72" width="316">
+            <control type="label">
+              <left>24</left>
+              <top>0</top>
+              <width>252</width>
+              <height>64</height>
+              <font>font25_title</font>
+              <textcolor>FFEDEDED</textcolor>
+              <align>left</align>
+              <aligny>center</aligny>
+              <label>$INFO[ListItem.Label]</label>
+            </control>
+            <control type="image">
+              <left>288</left>
+              <top>18</top>
+              <width>28</width>
+              <height>28</height>
+              <texture colordiffuse="FFEDEDED">icon_check.png</texture>
+              <visible>String.IsEqual(ListItem.Property(silo.check),true)</visible>
+            </control>
+            <control type="label">
+              <left>288</left>
+              <top>0</top>
+              <width>28</width>
+              <height>64</height>
+              <font>font25_title</font>
+              <textcolor>B3EDEDED</textcolor>
+              <align>center</align>
+              <aligny>center</aligny>
+              <label>›</label>
+              <visible>!String.IsEqual(ListItem.Property(silo.check),true)</visible>
+            </control>
+          </itemlayout>
+          <focusedlayout height="72" width="316">
+            <control type="image">
+              <left>0</left>
+              <top>0</top>
+              <width>340</width>
+              <height>64</height>
+              <texture colordiffuse="FFEDEDED" border="16">round16.png</texture>
+              <visible>Control.HasFocus(650)</visible>
+            </control>
+            <control type="image">
+              <left>0</left>
+              <top>0</top>
+              <width>340</width>
+              <height>64</height>
+              <texture colordiffuse="1FFFFFFF" border="16">round16.png</texture>
+              <visible>!Control.HasFocus(650)</visible>
+            </control>
+            <control type="label">
+              <left>24</left>
+              <top>0</top>
+              <width>252</width>
+              <height>64</height>
+              <font>font25_title</font>
+              <textcolor>FF000000</textcolor>
+              <align>left</align>
+              <aligny>center</aligny>
+              <label>$INFO[ListItem.Label]</label>
+              <visible>Control.HasFocus(650)</visible>
+            </control>
+            <control type="label">
+              <left>24</left>
+              <top>0</top>
+              <width>252</width>
+              <height>64</height>
+              <font>font25_title</font>
+              <textcolor>FFEDEDED</textcolor>
+              <align>left</align>
+              <aligny>center</aligny>
+              <label>$INFO[ListItem.Label]</label>
+              <visible>!Control.HasFocus(650)</visible>
+            </control>
+            <control type="image">
+              <left>288</left>
+              <top>18</top>
+              <width>28</width>
+              <height>28</height>
+              <texture colordiffuse="FF000000">icon_check.png</texture>
+              <visible>String.IsEqual(ListItem.Property(silo.check),true)</visible>
+            </control>
+            <control type="label">
+              <left>288</left>
+              <top>0</top>
+              <width>28</width>
+              <height>64</height>
+              <font>font25_title</font>
+              <textcolor>FF000000</textcolor>
+              <align>center</align>
+              <aligny>center</aligny>
+              <label>›</label>
+              <visible>!String.IsEqual(ListItem.Property(silo.check),true)</visible>
+            </control>
+          </focusedlayout>
+        </control>
+      </control>
+      <control type="group" id="655">
+        <left>352</left>
+        <top>0</top>
+        <width>300</width>
+        <height>600</height>
+        <control type="image" id="656">
+          <left>0</left>
+          <top>0</top>
+          <width>300</width>
+          <height>240</height>
+          <texture border="24">panel.png</texture>
+        </control>
+        <control type="list" id="660">
+          <left>12</left>
+          <top>16</top>
+          <width>276</width>
+          <height>280</height>
+          <orientation>vertical</orientation>
+          <scrolltime>120</scrolltime>
+          <onleft>650</onleft>
+          <ondown>659</ondown>
+          <itemlayout height="72" width="276">
+            <control type="label">
+              <left>24</left>
+              <top>0</top>
+              <width>212</width>
+              <height>64</height>
+              <font>font25_title</font>
+              <textcolor>FFEDEDED</textcolor>
+              <align>left</align>
+              <aligny>center</aligny>
+              <label>$INFO[ListItem.Label]</label>
+            </control>
+          </itemlayout>
+          <focusedlayout height="72" width="276">
+            <control type="image">
+              <left>0</left>
+              <top>0</top>
+              <width>300</width>
+              <height>64</height>
+              <texture colordiffuse="FFEDEDED" border="16">round16.png</texture>
+              <visible>Control.HasFocus(660)</visible>
+            </control>
+            <control type="image">
+              <left>0</left>
+              <top>0</top>
+              <width>300</width>
+              <height>64</height>
+              <texture colordiffuse="1FFFFFFF" border="16">round16.png</texture>
+              <visible>!Control.HasFocus(660)</visible>
+            </control>
+            <control type="label">
+              <left>24</left>
+              <top>0</top>
+              <width>212</width>
+              <height>64</height>
+              <font>font25_title</font>
+              <textcolor>FF000000</textcolor>
+              <align>left</align>
+              <aligny>center</aligny>
+              <label>$INFO[ListItem.Label]</label>
+              <visible>Control.HasFocus(660)</visible>
+            </control>
+            <control type="label">
+              <left>24</left>
+              <top>0</top>
+              <width>212</width>
+              <height>64</height>
+              <font>font25_title</font>
+              <textcolor>FFEDEDED</textcolor>
+              <align>left</align>
+              <aligny>center</aligny>
+              <label>$INFO[ListItem.Label]</label>
+              <visible>!Control.HasFocus(660)</visible>
+            </control>
+          </focusedlayout>
+        </control>
+      </control>
+      <control type="button" id="659">
+        <left>0</left>
+        <top>0</top>
+        <width>1</width>
+        <height>1</height>
+        <label/>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>center</align>
+        <aligny>center</aligny>
+        <texturefocus/>
+        <texturenofocus/>
+        <onup>659</onup>
+        <ondown>659</ondown>
+        <onleft>659</onleft>
+        <onright>659</onright>
+      </control>
+    </control>
+    <control type="group" id="675">
+      <left>0</left>
+      <top>128</top>
+      <width>360</width>
+      <height>312</height>
+      <animation effect="fade" start="0" end="100" time="180" delay="350">Visible</animation>
+      <animation effect="fade" start="100" end="0" time="120">Hidden</animation>
+      <visible>Control.HasFocus(203) | ControlGroup(675).HasFocus()</visible>
+      <control type="image" id="676">
+        <left>0</left>
+        <top>0</top>
+        <width>360</width>
+        <height>312</height>
         <texture border="24">panel.png</texture>
       </control>
-      <control type="button" id="642">
+      <control type="button" id="670">
         <left>16</left>
         <top>16</top>
-        <width>288</width>
+        <width>328</width>
         <height>64</height>
-        <label>Recommended</label>
+        <label>Recommendations</label>
         <font>font25_title</font>
         <textcolor>FFEDEDED</textcolor>
         <focusedcolor>FF000000</focusedcolor>
@@ -6885,17 +7111,17 @@
         <textoffsetx>24</textoffsetx>
         <texturefocus colordiffuse="FFEDEDED" border="16">round16.png</texturefocus>
         <texturenofocus/>
-        <onup>642</onup>
-        <ondown>643</ondown>
-        <onleft>642</onleft>
-        <onright>642</onright>
+        <onup>203</onup>
+        <ondown>671</ondown>
+        <onleft>670</onleft>
+        <onright>670</onright>
       </control>
-      <control type="button" id="643">
+      <control type="button" id="671">
         <left>16</left>
         <top>88</top>
-        <width>288</width>
+        <width>328</width>
         <height>64</height>
-        <label>Browse</label>
+        <label>Favorites</label>
         <font>font25_title</font>
         <textcolor>FFEDEDED</textcolor>
         <focusedcolor>FF000000</focusedcolor>
@@ -6904,17 +7130,17 @@
         <textoffsetx>24</textoffsetx>
         <texturefocus colordiffuse="FFEDEDED" border="16">round16.png</texturefocus>
         <texturenofocus/>
-        <onup>642</onup>
-        <ondown>644</ondown>
-        <onleft>643</onleft>
-        <onright>643</onright>
+        <onup>670</onup>
+        <ondown>672</ondown>
+        <onleft>671</onleft>
+        <onright>671</onright>
       </control>
-      <control type="button" id="644">
+      <control type="button" id="672">
         <left>16</left>
         <top>160</top>
-        <width>288</width>
+        <width>328</width>
         <height>64</height>
-        <label>Collections</label>
+        <label>Watchlist</label>
         <font>font25_title</font>
         <textcolor>FFEDEDED</textcolor>
         <focusedcolor>FF000000</focusedcolor>
@@ -6923,10 +7149,47 @@
         <textoffsetx>24</textoffsetx>
         <texturefocus colordiffuse="FFEDEDED" border="16">round16.png</texturefocus>
         <texturenofocus/>
-        <onup>643</onup>
-        <ondown>644</ondown>
-        <onleft>644</onleft>
-        <onright>644</onright>
+        <onup>671</onup>
+        <ondown>673</ondown>
+        <onleft>672</onleft>
+        <onright>672</onright>
+      </control>
+      <control type="button" id="673">
+        <left>16</left>
+        <top>232</top>
+        <width>328</width>
+        <height>64</height>
+        <label>History</label>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>left</align>
+        <aligny>center</aligny>
+        <textoffsetx>24</textoffsetx>
+        <texturefocus colordiffuse="FFEDEDED" border="16">round16.png</texturefocus>
+        <texturenofocus/>
+        <onup>672</onup>
+        <ondown>679</ondown>
+        <onleft>673</onleft>
+        <onright>673</onright>
+      </control>
+      <control type="button" id="679">
+        <left>0</left>
+        <top>0</top>
+        <width>1</width>
+        <height>1</height>
+        <label/>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>center</align>
+        <aligny>center</aligny>
+        <texturefocus/>
+        <texturenofocus/>
+        <onup>679</onup>
+        <ondown>679</ondown>
+        <onleft>679</onleft>
+        <onright>679</onright>
       </control>
     </control>
   </controls>

@@ -294,7 +294,13 @@ class PlaybackExtras:
         return total - self.lead if total and total > self.lead * 2 else None
 
     def _next_card(self, episode):
-        thumb = self.image(episode, "backdrop") if self.image else ""
+        # An episode has a still, not a backdrop; the series backdrop stands in when there is
+        # none, and for an unwatched episode when spoilers are hidden (Android's rule).
+        thumb = ""
+        if self.image:
+            hidden = self.options.get("hide_spoilers") and present.is_unwatched(episode)
+            thumb = ("" if hidden else self.image(episode, "still")) or self.image(self.item, "series_backdrop") \
+                or self.image(self.item, "backdrop")
         return {"eyebrow": present.episode_code(episode, ":"), "title": str(episode.get("title") or ""),
                 "thumb": thumb}
 

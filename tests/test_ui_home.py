@@ -386,7 +386,11 @@ class LibraryTests(unittest.TestCase):
         window.focus = 212
         window.onClick(212)
         self.assertEqual(window.focus, 212)
-        window.onAction(Action(DOWN))
+        window.onFocus(212)
+        window.onAction(Action(DOWN))  # (a): Down on the tab enters its panel first
+        self.assertEqual(window.focus, ui_home.FLYOUT_LIST)
+        window.onFocus(ui_home.LIB_EXIT)  # Down past the panel's last row
+        window.onAction(Action(DOWN))  # ...and that same key moves no further
         self.assertEqual(window.focus, ui_home.LIBRARY_CHIP)
         window.onAction(Action(UP))
         self.assertEqual(window.focus, 212)
@@ -556,80 +560,145 @@ class TabTests(unittest.TestCase):
             window.application.home_sections.assert_called()  # Rows refresh on return.
 
 
-class LibraryPillTests(unittest.TestCase):
+class TopBarPanelTests(unittest.TestCase):
+    """Android's top-bar selectors: a library cascade under Movies/Series, and For You's lists."""
+
     def libraries(self, count):
         return {"movie": [{"id": 3 + index, "name": "Films {}".format(index), "type": "movies"}
                           for index in range(count)], "series": [{"id": 9, "name": "Shows", "type": "series"}]}
 
-    def test_down_on_a_library_tab_opens_the_dropdown_under_it(self):
-        window = open_window()
-        window.focus = 211
-        window.onAction(Action(DOWN))
-        self.assertEqual(window.pill_open, "movie")
-        self.assertEqual(window.focus, 642)
-        self.assertEqual(window.properties["silo.pill"], "movie")
-        window.getControl(ui_home.PILL).setVisible.assert_called_with(True)
+    def window(self, count=2, known=None):
+        window = open_window(make_application(libraries=self.libraries(count)))
+        window.collections_known = dict(known or {})
+        window.collection_checks = set(window.collections_known)
+        window.check_collections = lambda libraries: None
+        return window
+
+    def test_focusing_a_library_tab_fills_and_places_its_panel(self):
+        window = self.window(2)
+        window.onFocus(211)
+        self.assertEqual(window.properties["silo.panel"], "movie")
+        self.assertEqual(window.properties["silo.panel_single"], "")
+        self.assertEqual([window.library_name("movie", row) for row in window.panel_rows],
+                         ["All movies", "Films 0", "Films 1"])
         left = window.cluster_left + window.tab_lefts["movies"]
-        window.getControl(ui_home.PILL).setPosition.assert_called_with(left, ui_home.PILL_TOP)
+        window.getControl(ui_home.LIB_PANEL).setPosition.assert_called_with(left, ui_home.PANEL_TOP)
+        self.assertEqual(window.flyout_rows, ["browse", "collections"])  # All: no Recommended
 
-    def test_browse_shows_the_grid(self):
-        window = open_window()
+    def test_the_flyout_follows_the_focused_library_and_hides_empty_collections(self):
+        window = self.window(2, known={3: True, 4: False})
+        window.focus = 211
+        window.onFocus(211)
+        window.onAction(Action(DOWN))
+        self.assertEqual(window.focus, ui_home.LIB_LIST)
+        rows = window.getControl(ui_home.LIB_LIST)
+        rows.getSelectedPosition.return_value = 2  # Films 1
+        window.focus = ui_home.LIB_LIST
+        window.onAction(Action(DOWN))
+        self.assertEqual(window.flyout_rows, ["recommended", "browse"])
+        window.getControl(ui_home.FLYOUT).setPosition.assert_called_with(
+            ui_home.LIB_WIDTH + ui_home.PANEL_GAP, ui_home.PANEL_ROW * 2)
+        rows.getSelectedPosition.return_value = 1  # Films 0 has collections
+        window.onAction(Action(UP))
+        self.assertEqual(window.flyout_rows, ["recommended", "browse", "collections"])
+
+    def test_sections_open_recommended_browse_and_collections_for_the_focused_library(self):
+        window = self.window(2)
         window.application.browse.return_value = page(2)
-        window.focus = 212
-        window.onAction(Action(DOWN))
-        window.onClick(643)
-        self.assertEqual(window.properties["silo.tab"], "series")
+        window.onFocus(211)
+        window.getControl(ui_home.LIB_LIST).getSelectedPosition.return_value = 1
+        window.update_flyout()
+        flyout = window.getControl(ui_home.FLYOUT_LIST)
+        flyout.getSelectedPosition.return_value = 0
+        window.onClick(ui_home.FLYOUT_LIST)
+        window.application.open_screen.assert_called_with("library_sections", library=self.libraries(2)["movie"][0])
+        flyout.getSelectedPosition.return_value = 2
+        window.onClick(ui_home.FLYOUT_LIST)
+        window.application.open_screen.assert_called_with("collections", library=self.libraries(2)["movie"][0])
+        window.onFocus(211)
+        window.getControl(ui_home.LIB_LIST).getSelectedPosition.return_value = 2
+        window.update_flyout()
+        flyout.getSelectedPosition.return_value = 1
+        window.onClick(ui_home.FLYOUT_LIST)
+        self.assertEqual(window.properties["silo.tab"], "movies")
+        self.assertEqual(window.library, self.libraries(2)["movie"][1])
         self.assertEqual(window.focus, ui_home.LIBRARY_CHIP)
-        self.assertIsNone(window.pill_open)
-        window.getControl(ui_home.PILL).setVisible.assert_called_with(False)
+        window.application.dialog.select.assert_not_called()  # no library picker any more
 
-    def test_recommended_opens_library_sections_for_the_only_library(self):
-        window = open_window()
+    def test_all_libraries_collections_and_selecting_a_library_row(self):
+        window = self.window(2)
+        window.application.browse.return_value = page(1)
+        window.onFocus(211)
+        window.getControl(ui_home.LIB_LIST).getSelectedPosition.return_value = 0
+        window.update_flyout()
+        window.getControl(ui_home.FLYOUT_LIST).getSelectedPosition.return_value = 1
+        window.onClick(ui_home.FLYOUT_LIST)
+        window.application.open_screen.assert_called_with("collections", library=None)
+        window.onFocus(211)
+        window.getControl(ui_home.LIB_LIST).getSelectedPosition.return_value = 1
+        window.onClick(ui_home.LIB_LIST)  # commits that library
+        self.assertEqual((window.properties["silo.tab"], window.library), ("movies", self.libraries(2)["movie"][0]))
+
+    def test_one_library_shows_its_sections_directly(self):
+        window = self.window(1)
+        window.onFocus(211)
+        self.assertEqual(window.properties["silo.panel_single"], "true")
+        self.assertEqual(window.flyout_rows, ["recommended", "browse", "collections"])
+        window.getControl(ui_home.FLYOUT).setPosition.assert_called_with(0, 0)
         window.focus = 211
         window.onAction(Action(DOWN))
-        window.onClick(642)
-        window.application.open_screen.assert_called_once_with(
-            "library_sections", library={"id": 3, "name": "Films", "type": "movie"})
-        window.application.dialog.select.assert_not_called()
-        self.assertEqual(window.focus, 211)
-        self.assertEqual(window.properties["silo.tab"], "home")
+        self.assertEqual(window.focus, ui_home.FLYOUT_LIST)
 
-    def test_recommended_asks_which_library_when_there_are_several(self):
-        window = open_window(make_application(libraries=self.libraries(2)))
-        window.application.dialog.select.return_value = 1
-        window.focus = 211
+    def test_current_library_is_checked(self):
+        window = self.window(2)
+        window.application.browse.return_value = page(1)
+        window.show_library("movie", self.libraries(2)["movie"][1])
+        window.onFocus(211)
+        window.getControl(ui_home.LIB_LIST).selectItem.assert_called_with(2)
+
+    def test_for_you_panel_rows(self):
+        window = self.window(1)
+        window.onFocus(203)
+        window.getControl(ui_home.FOR_YOU_PANEL).setPosition.assert_called()
+        window.focus = 203
         window.onAction(Action(DOWN))
-        window.onClick(642)
-        self.assertEqual(window.application.dialog.select.call_args.args[1], ["Films 0", "Films 1"])
-        window.application.open_screen.assert_called_once_with("library_sections",
-                                                               library=self.libraries(2)["movie"][1])
+        self.assertEqual(window.focus, 670)
+        window.onClick(670)
+        window.application.open_screen.assert_called_with("for_you")
+        for control_id, kind in ((671, "favorites"), (672, "watchlist"), (673, "history")):
+            window.onClick(control_id)
+            window.application.open_screen.assert_called_with("personal", kind=kind)
 
-    def test_collections_can_cover_all_libraries(self):
-        window = open_window(make_application(libraries=self.libraries(2)))
-        window.application.dialog.select.return_value = 0
-        window.focus = 211
-        window.onAction(Action(DOWN))
-        window.onClick(644)
-        self.assertEqual(window.application.dialog.select.call_args.args[1], ["All libraries", "Films 0", "Films 1"])
-        window.application.open_screen.assert_called_once_with("collections", library=None)
-
-    def test_cancelled_library_choice_opens_nothing(self):
-        window = open_window(make_application(libraries=self.libraries(2)))
-        window.application.dialog.select.return_value = -1
-        window.focus = 211
-        window.onAction(Action(DOWN))
-        window.onClick(644)
-        window.application.open_screen.assert_not_called()
-
-    def test_back_left_and_up_close_the_dropdown(self):
-        for action in (BACK, LEFT, UP):
-            window = open_window()
-            window.focus = 211
-            window.onAction(Action(DOWN))
-            window.onAction(Action(action))
-            self.assertIsNone(window.pill_open)
-            self.assertEqual(window.focus, 211)
+    def test_back_in_a_panel_returns_to_its_tab(self):
+        window = self.window(2)
+        window.onFocus(212)
+        for focus, tab in ((ui_home.FLYOUT_LIST, 212), (672, 203)):
+            window.focus = focus
+            window.onAction(Action(BACK))
+            self.assertEqual(window.focus, tab)
             self.assertFalse(window.closed)
+
+    def test_collections_are_checked_once_in_the_background(self):
+        window = open_window(make_application(libraries=self.libraries(2)))
+        calls = []
+
+        class Thread:
+            def __init__(self, target, name=None, daemon=None):
+                self.target = target
+
+            def start(self):
+                self.target()
+
+        def library_collections(client, library_id):
+            calls.append(library_id)
+            return [{"collections": [{"id": 1}]}] if library_id == 3 else [{"collections": []}]
+
+        with patch.object(ui_home.threading, "Thread", Thread), \
+                patch("resources.lib.silo.svc_browse.library_collections", library_collections):
+            window.onFocus(211)
+            window.onFocus(211)
+        self.assertEqual(calls, [3, 4])
+        self.assertEqual(window.collections_known, {3: True, 4: False})
 
 
 class ProfileMenuTests(unittest.TestCase):
@@ -1100,11 +1169,23 @@ class SkinTests(unittest.TestCase):
         wanted += list(ui_home.BADGE_IMAGES + ui_home.BADGE_LABELS) + list(ui_home.SEARCH_CHIPS)
         wanted += list(ui_home.MENU_ITEMS) + [chevron for pair in ui_home.CHEVRONS.values() for chevron in pair]
         wanted += list(ui_home.CHIPS) + [ui_home.FILTER_BADGE, 526, ui_home.RAIL, ui_home.RAIL_GROUP,
-                                         ui_home.PEOPLE_GROUP, ui_home.PEOPLE_LIST, ui_home.PILL, ui_home.PILL_PANEL]
-        wanted += list(ui_home.PILL_ITEMS)
+                                         ui_home.PEOPLE_GROUP, ui_home.PEOPLE_LIST]
+        wanted += [ui_home.LIB_PANEL, ui_home.LIB_PANEL_BG, ui_home.LIB_LIST, ui_home.LIB_EXIT, ui_home.FLYOUT,
+                   ui_home.FLYOUT_BG, ui_home.FLYOUT_LIST, ui_home.FOR_YOU_PANEL, ui_home.FOR_YOU_EXIT]
+        wanted += list(ui_home.FOR_YOU_ITEMS)
         wanted += [control for index in range(ui_home.SLOTS) for control in ui_home.slot_ids(index)]
         for control in wanted:
             self.assertIn(str(control), ids)
+
+    def test_top_bar_panels_fade_in_while_their_tab_or_contents_have_focus(self):
+        import xml.etree.ElementTree as ET
+        root = ET.parse(ROOT / "resources/skins/Default/1080i/SiloHome.xml").getroot()
+        for panel, tab in ((ui_home.LIB_PANEL, "211"), (ui_home.FOR_YOU_PANEL, "203")):
+            group = root.find(".//control[@id='{}']".format(panel))
+            self.assertIn("Control.HasFocus({})".format(tab), group.findtext("visible"))
+            self.assertIn("ControlGroup({}).HasFocus()".format(panel), group.findtext("visible"))
+            fade = [node for node in group.findall("animation") if node.text == "Visible"]
+            self.assertEqual(fade[0].get("delay"), "350")
 
     def test_fonts_are_estuary_names(self):
         allowed = {"font_MainMenu", "font52_title", "font36_title", "font30_title", "font25_title", "font27",

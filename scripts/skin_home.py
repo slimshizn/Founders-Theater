@@ -24,7 +24,16 @@ TABS = (("home", "Home", 210, 215, 124), ("movies", "Movies", 211, 216, 148),
 SEARCH_CHIPS = ((530, "video", "All", 112), (531, "movie", "Movies", 150), (532, "series", "Series", 140))
 MENU_ITEMS = ((610, "Switch profile"), (613, "Watchlist"), (614, "Favorites"), (615, "History"),
               (611, "Settings"), (616, "Edit home rows"), (617, "Switch server"), (612, "Sign out"))
-PILL_ITEMS = ((642, "Recommended"), (643, "Browse"), (644, "Collections"))
+# Top-bar panels (Android TvCascadeSelector / TvForYouSelector): they fade in a moment after a
+# tab takes focus and stay while focus is inside them. Python fills and places them.
+LIB_PANEL, LIB_PANEL_BG, LIB_LIST, LIB_EXIT = 645, 646, 650, 659
+FLYOUT, FLYOUT_BG, FLYOUT_LIST = 655, 656, 660
+LIB_WIDTH, FLYOUT_WIDTH, PANEL_GAP, PANEL_ROW = 340, 300, 12, 72
+FOR_YOU_PANEL, FOR_YOU_BG, FOR_YOU_EXIT = 675, 676, 679
+FOR_YOU_ITEMS = ((670, "Recommendations"), (671, "Favorites"), (672, "Watchlist"), (673, "History"))
+FOR_YOU_WIDTH = 360
+PANEL_FADE = ('<animation effect="fade" start="0" end="100" time="180" delay="350">Visible</animation>'
+              '<animation effect="fade" start="100" end="0" time="120">Hidden</animation>')
 # Library chips in order: (id, chevron ids or None).
 LIBRARY_CHIPS = ((510, (512, 513)), (511, (514, 515)), (516, None), (517, None), (518, None))
 RAIL_LETTERS = 28
@@ -432,13 +441,81 @@ def menu():
     return dropdown(600, 601, 1352, 128, 480, MENU_ITEMS, "!String.IsEmpty(Window.Property(silo.menu))")
 
 
-def pill():
-    """Library tab dropdown (Android TvLibraryPill); Python moves it under the Movies or Series tab."""
-    return dropdown(640, 641, 0, 128, 320, PILL_ITEMS, "!String.IsEmpty(Window.Property(silo.pill))")
+def panel_list(control_id, width, navigation, check=False):
+    """A text list for a top-bar panel. The selected row stays lightly marked while focus is
+    in the neighbouring list, so the flyout reads as belonging to its library."""
+    focused, anchored = "Control.HasFocus({})".format(control_id), "!Control.HasFocus({})".format(control_id)
+
+    def row(selected):
+        parts = []
+        if selected:
+            parts += [image(0, 0, width, 64, "round16.png", color=TEXT, border=16, condition=focused),
+                      image(0, 0, width, 64, "round16.png", color="1FFFFFFF", border=16, condition=anchored),
+                      label(24, 0, width - 88, 64, "$INFO[ListItem.Label]", "font25_title", BLACK,
+                            condition=focused),
+                      label(24, 0, width - 88, 64, "$INFO[ListItem.Label]", "font25_title", TEXT,
+                            condition=anchored)]
+        else:
+            parts.append(label(24, 0, width - 88, 64, "$INFO[ListItem.Label]", "font25_title", TEXT))
+        if check:
+            mark = "String.IsEqual(ListItem.Property(silo.check),true)"
+            color = BLACK if selected else TEXT
+            parts += [image(width - 52, 18, 28, 28, "icon_check.png", color=color, condition=mark),
+                      label(width - 52, 0, 28, 64, "›", "font25_title", color if selected else MUTED,
+                            align="center", condition="!" + mark)]
+        return "".join(parts)
+
+    return "".join([
+        '<control type="list" id="{}">'.format(control_id), rect(12, 16, width - 24, PANEL_ROW * 4 - 8),
+        "<orientation>vertical</orientation><scrolltime>120</scrolltime>", navigation,
+        '<itemlayout height="{}" width="{}">'.format(PANEL_ROW, width - 24), row(False), "</itemlayout>",
+        '<focusedlayout height="{}" width="{}">'.format(PANEL_ROW, width - 24), row(True), "</focusedlayout>",
+        "</control>"])
+
+
+def exit_button(control_id):
+    """An invisible target below a panel's last row: Python sends focus on into the page."""
+    return button(control_id, 0, 0, 1, 1, "", focus=None, navigation=nav(control_id))
+
+
+def library_panel():
+    """Movies/Series cascade: libraries (✓ on the current one), then Recommended/Browse/Collections
+    beside the focused library. With one library the sections show directly."""
+    shown = ("[Control.HasFocus(211) + String.IsEqual(Window.Property(silo.panel),movie)] | "
+             "[Control.HasFocus(212) + String.IsEqual(Window.Property(silo.panel),series)] | "
+             "ControlGroup({}).HasFocus()".format(LIB_PANEL))
+    libraries = group(None, 0, 0, LIB_WIDTH, 600, [
+        image(0, 0, LIB_WIDTH, PANEL_ROW * 4 + 24, "panel.png", border=24, control_id=LIB_PANEL_BG),
+        panel_list(LIB_LIST, LIB_WIDTH, "<onright>{}</onright><ondown>{}</ondown>".format(FLYOUT_LIST, LIB_EXIT),
+                   check=True),
+    ], condition="String.IsEmpty(Window.Property(silo.panel_single))")
+    flyout = group(FLYOUT, LIB_WIDTH + PANEL_GAP, 0, FLYOUT_WIDTH, 600, [
+        image(0, 0, FLYOUT_WIDTH, PANEL_ROW * 3 + 24, "panel.png", border=24, control_id=FLYOUT_BG),
+        panel_list(FLYOUT_LIST, FLYOUT_WIDTH, "<onleft>{}</onleft><ondown>{}</ondown>".format(LIB_LIST, LIB_EXIT)),
+    ])
+    return group(LIB_PANEL, 0, 128, LIB_WIDTH + PANEL_GAP + FLYOUT_WIDTH, 600,
+                 [libraries, flyout, exit_button(LIB_EXIT)], condition=shown, animation=PANEL_FADE)
+
+
+def for_you_panel():
+    """For You: Recommendations, Favorites, Watchlist and History (Android TvForYouSelector)."""
+    rows = []
+    for index, (control_id, text) in enumerate(FOR_YOU_ITEMS):
+        up = FOR_YOU_ITEMS[index - 1][0] if index else 203
+        down = FOR_YOU_ITEMS[index + 1][0] if index + 1 < len(FOR_YOU_ITEMS) else FOR_YOU_EXIT
+        rows.append(button(control_id, 16, 16 + PANEL_ROW * index, FOR_YOU_WIDTH - 32, 64, text,
+                           focus="round16.png", focus_border=16, align="left", offset=24,
+                           navigation=nav(control_id, up=up, down=down)))
+    height = 32 + PANEL_ROW * len(FOR_YOU_ITEMS) - 8
+    shown = "Control.HasFocus(203) | ControlGroup({}).HasFocus()".format(FOR_YOU_PANEL)
+    return group(FOR_YOU_PANEL, 0, 128, FOR_YOU_WIDTH, height,
+                 [image(0, 0, FOR_YOU_WIDTH, height, "panel.png", border=24, control_id=FOR_YOU_BG)] + rows
+                 + [exit_button(FOR_YOU_EXIT)], condition=shown, animation=PANEL_FADE)
 
 
 def window():
-    controls = [image(0, 0, 1920, 1080, "white.png", color=BLACK), home(), browse(), top_bar(), menu(), pill()]
+    controls = [image(0, 0, 1920, 1080, "white.png", color=BLACK), home(), browse(), top_bar(), menu(),
+                library_panel(), for_you_panel()]
     body = "".join([
         "<window>",
         '<defaultcontrol always="false">210</defaultcontrol>',

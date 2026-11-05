@@ -1,6 +1,7 @@
 """The home screen: top bar, hero and rows, library grids and search."""
 
 import json
+import threading
 from urllib.parse import quote
 
 import xbmcgui
@@ -81,10 +82,17 @@ WATCH_STATUSES = (("unwatched", "Unwatched", ("watched", False)), ("in_progress"
 SEARCHABLE_FACETS = frozenset(["genre", "content_rating", "studio", "network", "country"])
 FACET_SEARCH_MIN, FACET_SEARCH_LIMIT = 60, 100
 
-# Library tab dropdown (Android TvLibraryPill): Recommended / Browse / Collections.
-PILL, PILL_PANEL = 640, 641
-PILL_ITEMS = {642: "recommended", 643: "browse", 644: "collections"}
-PILL_TOP, PILL_WIDTH = 128, 320
+# Top-bar panels; scripts/skin_home.py fades them in a moment after a tab takes focus and keeps
+# them while focus is inside. Movies/Series: the library cascade (Android TvCascadeSelector), a
+# library list then Recommended/Browse/Collections beside the focused library. For You:
+# Recommendations, Favorites, Watchlist and History (TvForYouSelector, plus History).
+LIB_PANEL, LIB_PANEL_BG, LIB_LIST, LIB_EXIT = 645, 646, 650, 659
+FLYOUT, FLYOUT_BG, FLYOUT_LIST = 655, 656, 660
+FOR_YOU_PANEL, FOR_YOU_EXIT = 675, 679
+FOR_YOU_ITEMS = {670: "for_you", 671: "favorites", 672: "watchlist", 673: "history"}
+PANEL_CONTROLS = frozenset([LIB_LIST, FLYOUT_LIST] + list(FOR_YOU_ITEMS))
+PANEL_TOP, PANEL_ROW, LIB_WIDTH, FLYOUT_WIDTH, PANEL_GAP, FOR_YOU_WIDTH = 128, 72, 340, 300, 12, 360
+SECTION_LABELS = {"recommended": "Recommended", "browse": "Browse", "collections": "Collections"}
 
 MENU, MENU_PANEL = 600, 601
 # Avatar menu in Android order.
@@ -173,7 +181,16 @@ class HomeWindow(xbmcgui.WindowXML):
         self.tab_lefts = {}
         self.cluster_left = 0
         self.menu_open = False
-        self.pill_open = None
+        # The library panel: its kind, its rows (None is "All"), the flyout's sections, and
+        # which libraries have collections (absent: not checked yet, so Collections shows).
+        self.panel_kind = None
+        self.panel_rows = []
+        self.flyout_rows = []
+        self.collections_known = {}
+        self.collection_checks = set()
+        # Set when Down left a panel: Kodi reports the focus change before the key, and
+        # that Down must not also move on through the page.
+        self.left_panel = False
         self.last_focus = None
         self.home_stale = False
         self.kind = "movie"
@@ -211,14 +228,14 @@ class HomeWindow(xbmcgui.WindowXML):
             "silo.avatar": present.avatar_image(application.profile_avatar),
             "silo.profile_locked": "true" if self.locked() else "",
             "silo.menu": "",
-            "silo.pill": "",
+            "silo.panel": "",
+            "silo.panel_single": "",
             "silo.rail": "",
             "silo.people": "",
             "silo.filter_count": "",
             "silo.search_type": self.search_type,
         })
         self.getControl(MENU).setVisible(False)
-        self.getControl(PILL).setVisible(False)
         for kind in self.libraries:
             self.libraries[kind] = application.guard(lambda kind=kind: application.video_libraries(kind)) or []
         self.requests = application.guard(application.requests_enabled) is True
@@ -308,62 +325,147 @@ class HomeWindow(xbmcgui.WindowXML):
             self.select_home_tab()
         self.run_modal(lambda: self.application.open_screen(name), control_id)
 
-    # ------------------------------------------------------------ library dropdown
+    # ------------------------------------------------------------ top-bar panels
 
-    def open_pill(self, kind):
-        tab = "movies" if kind == "movie" else "series"
-        self.pill_open = kind
-        left = self.cluster_left + self.tab_lefts.get(tab, 0)
-        self.getControl(PILL).setPosition(min(left, SCREEN_WIDTH - PILL_WIDTH - 40), PILL_TOP)
-        self.setProperty("silo.pill", kind)
-        self.getControl(PILL).setVisible(True)
-        self.setFocusId(min(PILL_ITEMS))
+    def library_name(self, kind, library):
+        if library is None:
+            return "All movies" if kind == "movie" else "All series"
+        return str(library.get("name") or "Library")
 
-    def close_pill(self, focus=True):
-        kind, self.pill_open = self.pill_open, None
-        self.setProperty("silo.pill", "")
-        self.getControl(PILL).setVisible(False)
-        if focus and kind:
-            self.setFocusId(TAB_BUTTONS["movies" if kind == "movie" else "series"])
-
-    def choose_pill(self, control_id):
-        kind = self.pill_open
-        if kind is None:
-            return
-        choice = PILL_ITEMS[control_id]
-        self.close_pill()
-        tab_button = TAB_BUTTONS["movies" if kind == "movie" else "series"]
-        if choice == "browse":
-            self.show_library(kind)
-            self.setFocusId(LIBRARY_CHIP)
-            return
+    def prepare_panel(self, kind):
+        """Fill and place the library panel under the Movies or Series tab (on tab focus)."""
         libraries = self.libraries.get(kind) or []
-        if choice == "recommended":
-            library = self.pick_library(kind, libraries, allow_all=False)
-            if library is not None:
-                self.run_modal(lambda: self.application.open_screen("library_sections", library=library),
-                               tab_button)
-        else:
-            library = self.pick_library(kind, libraries, allow_all=True)
-            if library is not None:
-                chosen = library or None
-                self.run_modal(lambda: self.application.open_screen("collections", library=chosen), tab_button)
+        tab = "movies" if kind == "movie" else "series"
+        single = len(libraries) <= 1
+        self.panel_kind = kind
+        self.panel_rows = list(libraries) if single else [None] + list(libraries)
+        current = self.library if self.kind == kind else None
+        items = []
+        for library in self.panel_rows:
+            item = xbmcgui.ListItem(label=self.library_name(kind, library), offscreen=True)
+            item.setProperty("silo.check", "true" if library == current else "")
+            items.append(item)
+        rows = self.getControl(LIB_LIST)
+        rows.reset()
+        rows.addItems(items)
+        if current in self.panel_rows:
+            rows.selectItem(self.panel_rows.index(current))
+        height = PANEL_ROW * max(1, len(self.panel_rows)) - 8
+        rows.setHeight(height)
+        self.getControl(LIB_PANEL_BG).setHeight(height + 32)
+        self.setProperty("silo.panel_single", "true" if single else "")
+        left = self.cluster_left + self.tab_lefts.get(tab, 0)
+        width = FLYOUT_WIDTH if single else LIB_WIDTH + PANEL_GAP + FLYOUT_WIDTH
+        self.getControl(LIB_PANEL).setPosition(max(40, min(left, SCREEN_WIDTH - width - 40)), PANEL_TOP)
+        # Up returns to the tab; Left from the first column too (the panel serves both tabs).
+        tab_control = self.getControl(TAB_BUTTONS[tab])
+        rows.controlUp(tab_control)
+        rows.controlLeft(tab_control)
+        flyout = self.getControl(FLYOUT_LIST)
+        flyout.controlUp(tab_control)
+        flyout.controlLeft(tab_control if single else rows)
+        self.setProperty("silo.panel", kind)
+        self.check_collections(libraries)
+        self.update_flyout()
 
-    def pick_library(self, kind, libraries, allow_all):
-        """One library of the kind, asking when there are several; None when cancelled, {} for all."""
-        if not libraries:
-            return None
-        if len(libraries) == 1:
-            return libraries[0]
-        names = [str(library.get("name") or "Library") for library in libraries]
-        if allow_all:
-            names = ["All libraries"] + names
-        choice = self.application.dialog.select("Movies" if kind == "movie" else "Series", names)
-        if not isinstance(choice, int) or not 0 <= choice < len(names):
-            return None
-        if allow_all:
-            return libraries[choice - 1] if choice else {}
-        return libraries[choice]
+    def panel_library(self):
+        """The library the flyout belongs to: the only one, or the focused row (None is All)."""
+        if self.getProperty("silo.panel_single"):
+            return self.panel_rows[0] if self.panel_rows else None
+        position = self.getControl(LIB_LIST).getSelectedPosition()
+        return self.panel_rows[position] if 0 <= position < len(self.panel_rows) else None
+
+    def has_collections(self, library):
+        """False only when every library involved is known to have no collections."""
+        if library is not None:
+            return self.collections_known.get(library.get("id")) is not False
+        libraries = self.libraries.get(self.panel_kind) or []
+        return any(self.collections_known.get(entry.get("id")) is not False for entry in libraries)
+
+    def check_collections(self, libraries):
+        """Learn in the background which libraries have collections (Android hides the section)."""
+        pending = [library for library in libraries
+                   if library.get("id") not in self.collections_known and library.get("id") not in self.collection_checks]
+        if not pending:
+            return
+        self.collection_checks.update(library.get("id") for library in pending)
+        client = self.application.client
+
+        def work():
+            from .svc_browse import library_collections
+            for library in pending:
+                try:
+                    groups = library_collections(client, library["id"])
+                except Exception:  # Unknown stays unknown: Collections keeps showing.
+                    continue
+                self.collections_known[library["id"]] = any(group.get("collections") for group in groups)
+
+        threading.Thread(target=work, name="silo-collections", daemon=True).start()
+
+    def update_flyout(self):
+        """Recommended (one library only), Browse and Collections beside the focused library row."""
+        library = self.panel_library()
+        sections = (["recommended"] if library is not None else []) + ["browse"]
+        if self.has_collections(library):
+            sections.append("collections")
+        self.flyout_rows = sections
+        flyout = self.getControl(FLYOUT_LIST)
+        flyout.reset()
+        flyout.addItems([xbmcgui.ListItem(label=SECTION_LABELS[section], offscreen=True) for section in sections])
+        height = PANEL_ROW * len(sections) - 8
+        flyout.setHeight(height)
+        self.getControl(FLYOUT_BG).setHeight(height + 32)
+        if self.getProperty("silo.panel_single"):
+            self.getControl(FLYOUT).setPosition(0, 0)
+        else:
+            position = max(0, self.getControl(LIB_LIST).getSelectedPosition())
+            self.getControl(FLYOUT).setPosition(LIB_WIDTH + PANEL_GAP, PANEL_ROW * position)
+
+    def enter_panel(self, kind):
+        """Down on Movies or Series moves into its panel (Android: Down hands focus to the selector)."""
+        if self.panel_kind != kind:
+            self.prepare_panel(kind)
+        self.setFocusId(FLYOUT_LIST if self.getProperty("silo.panel_single") else LIB_LIST)
+
+    def place_for_you(self):
+        left = self.cluster_left + self.tab_lefts.get("for_you", 0)
+        self.getControl(FOR_YOU_PANEL).setPosition(max(40, min(left, SCREEN_WIDTH - FOR_YOU_WIDTH - 40)), PANEL_TOP)
+
+    def panel_tab(self, focus):
+        if focus in FOR_YOU_ITEMS:
+            return TAB_BUTTONS["for_you"]
+        return TAB_BUTTONS["movies" if self.panel_kind == "movie" else "series"]
+
+    def commit_library(self):
+        """Select on a library row: browse that library (Android commits the scope)."""
+        kind = self.panel_kind
+        if kind is not None:
+            self.show_library(kind, self.panel_library())
+            self.setFocusId(LIBRARY_CHIP)
+
+    def choose_section(self):
+        kind, library = self.panel_kind, self.panel_library()
+        position = self.getControl(FLYOUT_LIST).getSelectedPosition()
+        if kind is None or not 0 <= position < len(self.flyout_rows):
+            return
+        section = self.flyout_rows[position]
+        tab_button = TAB_BUTTONS["movies" if kind == "movie" else "series"]
+        if section == "browse":
+            self.show_library(kind, library)
+            self.setFocusId(LIBRARY_CHIP)
+        elif section == "recommended":
+            self.run_modal(lambda: self.application.open_screen("library_sections", library=library), tab_button)
+        else:
+            self.run_modal(lambda: self.application.open_screen("collections", library=library), tab_button)
+
+    def choose_for_you(self, control_id):
+        choice = FOR_YOU_ITEMS[control_id]
+        if choice == "for_you":
+            self.open_screen_tab(TAB_BUTTONS["for_you"])
+            return
+        if self.tab != "home":
+            self.select_home_tab()
+        self.run_modal(lambda: self.application.open_screen("personal", kind=choice), TAB_BUTTONS["for_you"])
 
     # ------------------------------------------------------------ avatar menu
 
@@ -641,12 +743,13 @@ class HomeWindow(xbmcgui.WindowXML):
 
     # ------------------------------------------------------------ library grid
 
-    def show_library(self, kind):
+    def show_library(self, kind, library=None):
+        """The kind's grid, for one library or (None) all of them."""
         if kind != self.kind:
             self.filters = {}
         self.kind = kind
         self.set_tab("movies" if kind == "movie" else "series")
-        self.library = None
+        self.library = library
         self.sort = "title"
         self.reversed = False
         self.update_chips()
@@ -1165,6 +1268,14 @@ class HomeWindow(xbmcgui.WindowXML):
     def onFocus(self, control_id):
         if self.row_of(control_id) is not None:
             self.hero_debouncer.trigger()
+        elif control_id in LIBRARY_TABS:
+            self.prepare_panel(LIBRARY_TABS[control_id])
+        elif control_id == TAB_BUTTONS["for_you"]:
+            self.place_for_you()
+        elif control_id in (LIB_EXIT, FOR_YOU_EXIT):
+            # Down past a panel's last row continues into the page.
+            self.left_panel = True
+            self.focus_content()
 
     def onAction(self, action):
         action_id = action.getId()
@@ -1176,10 +1287,15 @@ class HomeWindow(xbmcgui.WindowXML):
                 self.close_menu()
             return
         focus = self.focus_id()
-        if self.pill_open is not None:
-            # The first entry's onup points at itself, so Up there closes the dropdown.
-            if action_id in (ACTION_LEFT, ACTION_RIGHT) or (action_id == ACTION_UP and focus == min(PILL_ITEMS)):
-                self.close_pill()
+        if self.left_panel:
+            self.left_panel = False
+            if action_id == ACTION_DOWN:
+                return
+        if focus == LIB_LIST and action_id in (ACTION_UP, ACTION_DOWN):
+            # Kodi has already moved the selection: the flyout follows the focused library.
+            self.update_flyout()
+            return
+        if focus in PANEL_CONTROLS:
             return
         row = self.row_of(focus)
         if action_id in CONTEXT_ACTIONS:
@@ -1198,9 +1314,10 @@ class HomeWindow(xbmcgui.WindowXML):
             if row is not None:
                 if row + 1 < len(self.sections):
                     self.focus_row(row + 1)
-            elif focus in LIBRARY_TABS and TAB_KINDS.get(self.tab) != LIBRARY_TABS[focus]:
-                # Android's library pill: Down on Movies or Series opens Recommended/Browse/Collections.
-                self.open_pill(LIBRARY_TABS[focus])
+            elif focus in LIBRARY_TABS:
+                self.enter_panel(LIBRARY_TABS[focus])
+            elif focus == TAB_BUTTONS["for_you"]:
+                self.setFocusId(min(FOR_YOU_ITEMS))
             elif focus in BAR_CONTROLS:
                 self.focus_content()
         elif action_id in (ACTION_LEFT, ACTION_RIGHT) and row is not None:
@@ -1209,10 +1326,11 @@ class HomeWindow(xbmcgui.WindowXML):
             self.application.guard(self.load_more)
 
     def back(self):
+        focus = self.focus_id()
         if self.menu_open:
             self.close_menu()
-        elif self.pill_open is not None:
-            self.close_pill()
+        elif focus in PANEL_CONTROLS:
+            self.setFocusId(self.panel_tab(focus))
         elif self.tab != "home":
             self.show_home()
         elif self.row_of(self.focus_id()) is not None:
@@ -1245,8 +1363,12 @@ class HomeWindow(xbmcgui.WindowXML):
             self.open(self.grid_items, control_id)
         elif control_id in MENU_ITEMS:
             self.choose_menu(control_id)
-        elif control_id in PILL_ITEMS:
-            self.choose_pill(control_id)
+        elif control_id == LIB_LIST:
+            self.commit_library()
+        elif control_id == FLYOUT_LIST:
+            self.choose_section()
+        elif control_id in FOR_YOU_ITEMS:
+            self.choose_for_you(control_id)
         elif control_id == AVATAR:
             self.open_menu()
         elif control_id == TABS[0][1]:
