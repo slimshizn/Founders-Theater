@@ -466,7 +466,7 @@ def panel_list(control_id, width, navigation, check=False):
         return "".join(parts)
 
     return "".join([
-        '<control type="list" id="{}">'.format(control_id), rect(12, 16, width - 24, PANEL_ROW * 4 - 8),
+        '<control type="list" id="{}">'.format(control_id), rect(12, 16, width - 24, PANEL_ROW * 4),
         "<orientation>vertical</orientation><scrolltime>120</scrolltime>", navigation,
         '<itemlayout height="{}" width="{}">'.format(PANEL_ROW, width - 24), row(False), "</itemlayout>",
         '<focusedlayout height="{}" width="{}">'.format(PANEL_ROW, width - 24), row(True), "</focusedlayout>",

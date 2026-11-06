@@ -6883,7 +6883,7 @@
           <left>12</left>
           <top>16</top>
           <width>316</width>
-          <height>280</height>
+          <height>288</height>
           <orientation>vertical</orientation>
           <scrolltime>120</scrolltime>
           <onright>660</onright>
@@ -7001,7 +7001,7 @@
           <left>12</left>
           <top>16</top>
           <width>276</width>
-          <height>280</height>
+          <height>288</height>
           <orientation>vertical</orientation>
           <scrolltime>120</scrolltime>
           <onleft>650</onleft>

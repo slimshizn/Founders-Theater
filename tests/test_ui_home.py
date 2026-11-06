@@ -676,6 +676,42 @@ class TopBarPanelTests(unittest.TestCase):
         window.onFocus(211)
         window.getControl(ui_home.LIB_LIST).selectItem.assert_called_with(2)
 
+    def test_the_flyout_starts_beside_the_row_it_selects_not_kodis_stale_selection(self):
+        window = self.window(2)
+        window.application.browse.return_value = page(1)
+        window.show_library("movie", self.libraries(2)["movie"][1])
+        rows = window.getControl(ui_home.LIB_LIST)
+        rows.getSelectedPosition.return_value = 0  # Kodi has not applied selectItem yet
+        window.onFocus(211)
+        rows.selectItem.assert_called_with(2)
+        window.getControl(ui_home.FLYOUT).setPosition.assert_called_with(
+            ui_home.LIB_WIDTH + ui_home.PANEL_GAP, ui_home.PANEL_ROW * 2)
+        self.assertEqual(window.panel_library(), self.libraries(2)["movie"][1])
+
+    def test_away_from_the_library_tab_the_panel_starts_on_all_without_a_check(self):
+        window = self.window(2)
+        window.application.browse.return_value = page(1)
+        window.show_library("movie", self.libraries(2)["movie"][1])
+        window.select_home_tab()
+        rows = window.getControl(ui_home.LIB_LIST)
+        rows.getSelectedPosition.return_value = 2  # still the row browsed before
+        rows.addItems.reset_mock()
+        window.onFocus(211)
+        rows.selectItem.assert_called_with(0)
+        checks = [call.args for item in rows.addItems.call_args[0][0] for call in item.setProperty.call_args_list
+                  if call.args[0] == "silo.check"]
+        self.assertTrue(checks)
+        self.assertTrue(all(value == "" for _, value in checks))
+        window.getControl(ui_home.FLYOUT).setPosition.assert_called_with(ui_home.LIB_WIDTH + ui_home.PANEL_GAP, 0)
+        self.assertIsNone(window.panel_library())
+
+    def test_panel_lists_fit_every_row_so_they_never_scroll(self):
+        window = self.window(4)
+        window.onFocus(211)
+        window.getControl(ui_home.LIB_LIST).setHeight.assert_called_with(ui_home.PANEL_ROW * 5)
+        window.getControl(ui_home.FLYOUT_LIST).setHeight.assert_called_with(
+            ui_home.PANEL_ROW * len(window.flyout_rows))
+
     def test_for_you_panel_rows(self):
         window = self.window(1)
         window.onFocus(203)

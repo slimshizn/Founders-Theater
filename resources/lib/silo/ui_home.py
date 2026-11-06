@@ -340,20 +340,22 @@ class HomeWindow(xbmcgui.WindowXML):
         single = len(libraries) <= 1
         self.panel_kind = kind
         self.panel_rows = list(libraries) if single else [None] + list(libraries)
-        current = self.library if self.kind == kind else None
+        # The check marks the library being browsed, so only while its tab is the current one.
+        browsing = self.kind == kind and self.tab == tab
+        current = self.library if browsing else None
         items = []
         for library in self.panel_rows:
             item = xbmcgui.ListItem(label=self.library_name(kind, library), offscreen=True)
-            item.setProperty("silo.check", "true" if library == current else "")
+            item.setProperty("silo.check", "true" if browsing and library == current else "")
             items.append(item)
         rows = self.getControl(LIB_LIST)
         rows.reset()
         rows.addItems(items)
-        if current in self.panel_rows:
-            rows.selectItem(self.panel_rows.index(current))
-        height = PANEL_ROW * max(1, len(self.panel_rows)) - 8
-        rows.setHeight(height)
-        self.getControl(LIB_PANEL_BG).setHeight(height + 32)
+        selected = self.panel_rows.index(current) if browsing and current in self.panel_rows else 0
+        rows.selectItem(selected)
+        # Room for every row (the last one's gap included) so the list never scrolls under the flyout.
+        rows.setHeight(PANEL_ROW * max(1, len(self.panel_rows)))
+        self.getControl(LIB_PANEL_BG).setHeight(PANEL_ROW * max(1, len(self.panel_rows)) + 24)
         self.setProperty("silo.panel_single", "true" if single else "")
         left = self.cluster_left + self.tab_lefts.get(tab, 0)
         width = FLYOUT_WIDTH if single else LIB_WIDTH + PANEL_GAP + FLYOUT_WIDTH
@@ -367,14 +369,15 @@ class HomeWindow(xbmcgui.WindowXML):
         flyout.controlLeft(tab_control if single else rows)
         self.setProperty("silo.panel", kind)
         self.check_collections(libraries)
-        self.update_flyout()
+        # Kodi applies selectItem later, so reading the selection back here would give the old row.
+        self.update_flyout(selected)
 
     def panel_library(self):
         """The library the flyout belongs to: the only one, or the focused row (None is All)."""
         if self.getProperty("silo.panel_single"):
             return self.panel_rows[0] if self.panel_rows else None
-        position = self.getControl(LIB_LIST).getSelectedPosition()
-        return self.panel_rows[position] if 0 <= position < len(self.panel_rows) else None
+        position = self.flyout_for
+        return self.panel_rows[position] if isinstance(position, int) and 0 <= position < len(self.panel_rows) else None
 
     def has_collections(self, library):
         """False only when every library involved is known to have no collections."""
@@ -403,25 +406,24 @@ class HomeWindow(xbmcgui.WindowXML):
 
         threading.Thread(target=work, name="silo-collections", daemon=True).start()
 
-    def update_flyout(self):
-        """Recommended (one library only), Browse and Collections beside the focused library row."""
+    def update_flyout(self, position=None):
+        """Recommended (one library only), Browse and Collections beside a library row: ``position``,
+        or the focused one."""
+        self.flyout_for = self.getControl(LIB_LIST).getSelectedPosition() if position is None else position
         library = self.panel_library()
         sections = (["recommended"] if library is not None else []) + ["browse"]
         if self.has_collections(library):
             sections.append("collections")
         self.flyout_rows = sections
-        self.flyout_for = self.getControl(LIB_LIST).getSelectedPosition()
         flyout = self.getControl(FLYOUT_LIST)
         flyout.reset()
         flyout.addItems([xbmcgui.ListItem(label=SECTION_LABELS[section], offscreen=True) for section in sections])
-        height = PANEL_ROW * len(sections) - 8
-        flyout.setHeight(height)
-        self.getControl(FLYOUT_BG).setHeight(height + 32)
+        flyout.setHeight(PANEL_ROW * len(sections))
+        self.getControl(FLYOUT_BG).setHeight(PANEL_ROW * len(sections) + 24)
         if self.getProperty("silo.panel_single"):
             self.getControl(FLYOUT).setPosition(0, 0)
         else:
-            position = max(0, self.getControl(LIB_LIST).getSelectedPosition())
-            self.getControl(FLYOUT).setPosition(LIB_WIDTH + PANEL_GAP, PANEL_ROW * position)
+            self.getControl(FLYOUT).setPosition(LIB_WIDTH + PANEL_GAP, PANEL_ROW * max(0, self.flyout_for))
 
     def follow_library_row(self):
         """Rebuild the flyout when the focused library row changed (a mouse hover sends no Up/Down)."""
