@@ -34,7 +34,7 @@
       <platform>all</platform>
     </extension>
   </addon>
-  <addon id="script.founderstheater" name="Founders Theater" version="0.9.6" provider-name="slimshizn">
+  <addon id="script.founderstheater" name="Founders Theater" version="0.9.7" provider-name="slimshizn">
     <requires>
       <import addon="xbmc.python" version="3.0.1" />
       <import addon="xbmc.gui" version="5.17.0" />
