@@ -5957,6 +5957,22 @@
             <width>260</width>
             <height>390</height>
             <control type="image">
+              <left>26</left>
+              <top>-12</top>
+              <width>208</width>
+              <height>40</height>
+              <texture colordiffuse="FF23262E" border="16">round16.png</texture>
+              <visible>!String.IsEmpty(ListItem.Property(silo.box_set))</visible>
+            </control>
+            <control type="image">
+              <left>13</left>
+              <top>-6</top>
+              <width>234</width>
+              <height>40</height>
+              <texture colordiffuse="FF2F333D" border="16">round16.png</texture>
+              <visible>!String.IsEmpty(ListItem.Property(silo.box_set))</visible>
+            </control>
+            <control type="image">
               <left>0</left>
               <top>0</top>
               <width>260</width>
@@ -5986,6 +6002,46 @@
               <height>26</height>
               <texture colordiffuse="FF000000">icon_check.png</texture>
               <visible>!String.IsEmpty(ListItem.Property(silo.watched))</visible>
+            </control>
+            <control type="image">
+              <left>12</left>
+              <top>12</top>
+              <width>104</width>
+              <height>34</height>
+              <texture colordiffuse="CC000000" border="6">round6.png</texture>
+              <visible>!String.IsEmpty(ListItem.Property(silo.box_set))</visible>
+            </control>
+            <control type="label">
+              <left>12</left>
+              <top>12</top>
+              <width>104</width>
+              <height>34</height>
+              <font>font12</font>
+              <textcolor>FFEDEDED</textcolor>
+              <align>center</align>
+              <aligny>center</aligny>
+              <label>BOX SET</label>
+              <visible>!String.IsEmpty(ListItem.Property(silo.box_set))</visible>
+            </control>
+            <control type="image">
+              <left>156</left>
+              <top>12</top>
+              <width>92</width>
+              <height>34</height>
+              <texture colordiffuse="CC000000" border="6">round6.png</texture>
+              <visible>!String.IsEmpty(ListItem.Property(silo.box_set))</visible>
+            </control>
+            <control type="label">
+              <left>156</left>
+              <top>12</top>
+              <width>92</width>
+              <height>34</height>
+              <font>font12</font>
+              <textcolor>FFEDEDED</textcolor>
+              <align>center</align>
+              <aligny>center</aligny>
+              <label>$INFO[ListItem.Property(silo.corner)]</label>
+              <visible>!String.IsEmpty(ListItem.Property(silo.box_set))</visible>
             </control>
             <control type="progress">
               <left>16</left>
@@ -6040,6 +6096,22 @@
               <visible>Control.HasFocus(500)</visible>
             </control>
             <control type="image">
+              <left>26</left>
+              <top>-12</top>
+              <width>208</width>
+              <height>40</height>
+              <texture colordiffuse="FF23262E" border="16">round16.png</texture>
+              <visible>!String.IsEmpty(ListItem.Property(silo.box_set))</visible>
+            </control>
+            <control type="image">
+              <left>13</left>
+              <top>-6</top>
+              <width>234</width>
+              <height>40</height>
+              <texture colordiffuse="FF2F333D" border="16">round16.png</texture>
+              <visible>!String.IsEmpty(ListItem.Property(silo.box_set))</visible>
+            </control>
+            <control type="image">
               <left>0</left>
               <top>0</top>
               <width>260</width>
@@ -6069,6 +6141,46 @@
               <height>26</height>
               <texture colordiffuse="FF000000">icon_check.png</texture>
               <visible>!String.IsEmpty(ListItem.Property(silo.watched))</visible>
+            </control>
+            <control type="image">
+              <left>12</left>
+              <top>12</top>
+              <width>104</width>
+              <height>34</height>
+              <texture colordiffuse="CC000000" border="6">round6.png</texture>
+              <visible>!String.IsEmpty(ListItem.Property(silo.box_set))</visible>
+            </control>
+            <control type="label">
+              <left>12</left>
+              <top>12</top>
+              <width>104</width>
+              <height>34</height>
+              <font>font12</font>
+              <textcolor>FFEDEDED</textcolor>
+              <align>center</align>
+              <aligny>center</aligny>
+              <label>BOX SET</label>
+              <visible>!String.IsEmpty(ListItem.Property(silo.box_set))</visible>
+            </control>
+            <control type="image">
+              <left>156</left>
+              <top>12</top>
+              <width>92</width>
+              <height>34</height>
+              <texture colordiffuse="CC000000" border="6">round6.png</texture>
+              <visible>!String.IsEmpty(ListItem.Property(silo.box_set))</visible>
+            </control>
+            <control type="label">
+              <left>156</left>
+              <top>12</top>
+              <width>92</width>
+              <height>34</height>
+              <font>font12</font>
+              <textcolor>FFEDEDED</textcolor>
+              <align>center</align>
+              <aligny>center</aligny>
+              <label>$INFO[ListItem.Property(silo.corner)]</label>
+              <visible>!String.IsEmpty(ListItem.Property(silo.box_set))</visible>
             </control>
             <control type="progress">
               <left>16</left>

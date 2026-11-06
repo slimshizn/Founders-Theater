@@ -93,6 +93,7 @@ def make_application(sections=None, libraries=None, store=None, options=None, re
         item.get("content_id", "person"), kind)
     application.options.return_value = options if options is not None else {"show_plot": True}
     application.requests_enabled.return_value = requests
+    application.box_sets_on.return_value = False
     application.client.server_url = SERVER
     application.profile = {"id": "p1"}
     application.home_sections.return_value = sections if sections is not None else [
@@ -437,6 +438,63 @@ class SearchTests(unittest.TestCase):
         self.assertEqual(window.properties["silo.search_type"], "series")
         self.assertEqual(window.properties["silo.empty"], "")
         window.getControl(ui_home.GRID).setPosition.assert_called_with(ui_home.GRID_LEFT, ui_home.SEARCH_GRID_TOP)
+
+    def search_with_box_sets(self, search_type="video"):
+        window = open_window()
+        window.application.box_sets_on.return_value = True
+        window.application.browse.return_value = page(2)
+        found = {"id": "1241", "library_id": "2", "title": "Example Box Set", "overview": "Films.",
+                 "poster_url": "/artwork/p.jpg", "backdrop_url": "", "movie_count": 8, "played_count": 5,
+                 "first_year": 2001, "last_year": 2011}
+        window.onClick(ui_home.SEARCH_BUTTON)
+        window.search_type = search_type
+        window.application.dialog.input.return_value = "example"
+        with patch.object(ui_home.svc_boxsets, "search", return_value=[found]) as search:
+            window.onClick(ui_home.SEARCH_FIELD)
+        return window, search
+
+    def test_matching_box_sets_lead_all_and_movies_results(self):
+        window, search = self.search_with_box_sets()
+        search.assert_called_once_with(window.application.client, "example")
+        self.assertEqual([item.get("type") for item in window.grid_items], ["box_set", "movie", "movie"])
+        card = window.getControl(ui_home.GRID).addItems.call_args[0][0][0]
+        self.assertEqual((card.label, card.label2), ("Example Box Set", "5 / 8 watched"))
+        card.setProperty.assert_any_call("silo.box_set", "true")
+        card.setProperty.assert_any_call("silo.corner", "8 films")
+        card.setProperty.assert_any_call("silo.progress", "62")
+        _window, search = self.search_with_box_sets("movie")
+        search.assert_called_once()
+
+    def test_series_search_and_servers_without_box_sets_never_ask(self):
+        _window, search = self.search_with_box_sets("series")
+        search.assert_not_called()
+        window = open_window()
+        window.onClick(ui_home.SEARCH_BUTTON)
+        window.application.dialog.input.return_value = "example"
+        window.application.browse.return_value = page(1)
+        with patch.object(ui_home.svc_boxsets, "search") as search:
+            window.onClick(ui_home.SEARCH_FIELD)
+        search.assert_not_called()
+        self.assertEqual(len(window.grid_items), 1)
+
+    def test_a_failed_box_set_search_still_shows_titles(self):
+        window = open_window()
+        window.application.box_sets_on.return_value = True
+        window.application.browse.return_value = page(2)
+        window.onClick(ui_home.SEARCH_BUTTON)
+        window.application.dialog.input.return_value = "example"
+        with patch.object(ui_home.svc_boxsets, "search", side_effect=OSError("offline")):
+            window.onClick(ui_home.SEARCH_FIELD)
+        self.assertEqual(len(window.grid_items), 2)
+
+    def test_a_box_set_card_opens_the_box_set_and_has_no_menu(self):
+        window, _search = self.search_with_box_sets()
+        window.getControl(ui_home.GRID).getSelectedPosition.return_value = 0
+        window.onClick(ui_home.GRID)
+        window.application.open_screen.assert_called_once_with("box_set", box_set_id="1241", library_id="2")
+        window.application.open_item.assert_not_called()
+        window.card_menu(ui_home.GRID)
+        window.application.dialog.contextmenu.assert_not_called()
 
     def test_up_from_field_reaches_search_button(self):
         window = open_window()
@@ -1204,6 +1262,15 @@ class SkinTests(unittest.TestCase):
         for tag in ("onup", "ondown", "onleft", "onright"):
             for element in self.tree.iter(tag):
                 self.assertIn(element.text, ids, "{} -> {}".format(tag, element.text))
+
+    def test_box_set_card_layers_are_on_the_search_grid_only(self):
+        def box_set_layers(node):
+            return [element for element in node.iter("visible") if "silo.box_set" in (element.text or "")]
+
+        grid = next(control for control in self.tree.iter("control") if control.get("id") == "500")
+        # Two sleeves, the badge and the film count (pill and text), in both layouts.
+        self.assertEqual(len(box_set_layers(grid)), 12)
+        self.assertEqual(len(box_set_layers(self.tree.getroot())), 12)
 
     def test_textures_exist(self):
         media = SKIN / "media"

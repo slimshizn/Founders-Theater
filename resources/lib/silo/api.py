@@ -219,7 +219,7 @@ class SiloClient:
     # parameter ("The request did not pass validation"), so nothing else gets them.
     ARTWORK_PATHS = re.compile(
         r"^/(catalog|catalog/audiobook-groups"
-        r"|catalog/items/[^/]+(/(episodes|manga-files|versions))?"
+        r"|catalog/items/[^/]+(/(episodes|manga-files|versions|box-set))?|catalog/box-sets/[^/]+"
         r"|catalog/series/[^/]+/seasons(/[^/]+(/episodes)?)?"
         r"|home/(layout|sections)|home/sections/[^/]+/items"
         r"|library/[^/]+/sections(/[^/]+/items)?"

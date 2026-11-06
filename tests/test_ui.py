@@ -399,6 +399,15 @@ class ApplicationFlowTests(unittest.TestCase):
         self.assertTrue(self.app.choose_profile(force=True))
         self.assertIsNone(self.app._libraries)
 
+    def test_box_sets_are_on_when_a_movie_library_gathers_them(self):
+        self.app.client.libraries.return_value = {"items": [
+            {"id": 1, "name": "Films", "type": "movies"},
+            {"id": 2, "name": "Shows", "type": "series", "box_sets_enabled": True}]}
+        self.assertFalse(self.app.box_sets_on())  # Only movie libraries have box sets.
+        self.app._libraries = None
+        self.app.client.libraries.return_value["items"][0]["box_sets_enabled"] = True
+        self.assertTrue(self.app.box_sets_on())
+
     def test_similar_failures_hide_the_row(self):
         self.app.client.similar.return_value = {"items": [{"content_id": "m:3", "type": "movie"}]}
         self.assertEqual(self.app.similar({"content_id": "m:1"}), [{"content_id": "m:3", "type": "movie"}])
@@ -610,11 +619,12 @@ class ApplicationFlowTests(unittest.TestCase):
         for path in ("/library/7/collections", "/library/7/collections/12/items", "/library/7/layout",
                      "/watchlist/movie:1", "/favorites/movie:1", "/watch/movie:1/trickplay", "/home/capabilities",
                      "/shuffles/capabilities", "/catalog/items/series:1/themes/3/audio", "/catalog/people/5",
-                     "/history-imports/runs"):
+                     "/history-imports/runs", "/catalog/box-sets"):
             self.assertEqual(client._with_artwork("GET", path, {"limit": 50}), {"limit": 50}, path)
         for path in ("/library/7/sections", "/library/7/sections/3/items", "/home/layout", "/home/sections/9/items",
                      "/catalog/items/series:1/episodes", "/catalog/series/series:1/seasons/2/episodes",
-                     "/watchlist", "/favorites", "/history", "/shuffles/abc", "/watch/movie:1"):
+                     "/watchlist", "/favorites", "/history", "/shuffles/abc", "/watch/movie:1",
+                     "/catalog/box-sets/1241", "/catalog/items/movie:1/box-set"):
             self.assertEqual(client._with_artwork("GET", path, None).get("image_size"), "large", path)
 
     def test_session_storage_failure_is_shown_inside_startup_error_handler(self):

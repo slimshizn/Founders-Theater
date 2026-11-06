@@ -21,6 +21,7 @@
 - Rest on Movies, Series or For You for a menu: pick a library, then Recommended, Browse or Collections; or Recommendations, Favorites, Watchlist and History.
 - For You, Calendar, Watchlist, Favorites, History, and Requests when your server offers them.
 - Search with people, and person pages with their filmography.
+- Movie box sets, where the server has them on: a box set row on a movie's page, a box set page with Play on the next film, and box sets leading search.
 - Title pages with seasons and episodes, cast, trailers and extras, related titles and the full synopsis.
 - Rate movies and series from 1 to 5 stars from the title page's More menu.
 

@@ -6,9 +6,9 @@ from urllib.parse import quote
 
 import xbmcgui
 
-from . import present, svc_personal
+from . import present, svc_boxsets, svc_personal
 from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_MOUSE_MOVE, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, Debouncer,
-                        card_list_item, set_properties)
+                        box_set_list_item, card_list_item, set_properties)
 
 # Control ids; scripts/skin_home.py writes the matching SiloHome.xml.
 TOP_BAR, TAB_CLUSTER, SEARCH_BUTTON, AVATAR = 200, 202, 201, 230
@@ -45,6 +45,9 @@ CHEVRONS = {LIBRARY_CHIP: (512, 513), SORT_CHIP: (514, 515)}
 CHIP_TOP, CHIP_GAP, BADGE_SIZE = 188, 16, 32
 GRID_LEFT, LIBRARY_GRID_TOP, SEARCH_GRID_TOP = 40, 270, 370
 SEARCH_CHIPS = {530: "video", 531: "movie", 532: "series"}
+# Box sets are movies, so they lead the All and Movies results only (Android TvSearchViewModel).
+BOX_SET_SEARCH_TYPES = ("video", "movie")
+BOX_SET = "box_set"
 LOAD_AHEAD = 12
 # (sort value, dialog label, chip label); values are the server's catalog sort fields.
 SORTS = (("title", "Title A–Z", "Title"), ("-added_at", "Recently added", "Recently added"),
@@ -966,8 +969,9 @@ class HomeWindow(xbmcgui.WindowXML):
         self.setProperty("silo.total", "")
         self.setProperty("silo.empty", empty)
 
-    def load_grid(self, params, seek=None):
-        """Load the first page; ``seek`` starts it at a list position (the A–Z rail)."""
+    def load_grid(self, params, seek=None, lead=()):
+        """Load the first page; ``seek`` starts it at a list position (the A–Z rail), and
+        ``lead`` (search's box sets) comes ahead of it so the grid never shifts under focus."""
         self.clear_grid()
         generation = self.generation
         self.params = params
@@ -978,14 +982,15 @@ class HomeWindow(xbmcgui.WindowXML):
         if response is None:
             self.setProperty("silo.empty", "Titles could not be loaded.")
             return
-        self.append_page(response)
+        self.append_page(response, lead)
         if seek is None:
             self.load_letters()
 
-    def append_page(self, response):
-        items = present.video_items(response.get("items"))
+    def append_page(self, response, lead=()):
+        items = [dict(found, type=BOX_SET) for found in lead] + present.video_items(response.get("items"))
         self.grid_items.extend(items)
-        self.getControl(GRID).addItems([card_list_item(item, self.card_image) for item in items])
+        self.getControl(GRID).addItems([box_set_list_item(item, self.application.image) if item["type"] == BOX_SET
+                                        else card_list_item(item, self.card_image) for item in items])
         self.cursor = response.get("next_cursor") or None
         if self.tab in TAB_KINDS:
             self.setProperty("silo.total", total_text(response.get("total")))
@@ -1105,7 +1110,18 @@ class HomeWindow(xbmcgui.WindowXML):
             self.clear_grid("Search your library")
             return
         self.show_people(self.search_people())
-        self.load_grid({"q": self.query, "type": self.search_type})
+        self.load_grid({"q": self.query, "type": self.search_type}, lead=self.search_box_sets())
+
+    def search_box_sets(self):
+        """GET /catalog/box-sets, asked only while some library has box sets on; optional, like People."""
+        if self.search_type not in BOX_SET_SEARCH_TYPES:
+            return []
+        try:
+            if not self.application.box_sets_on():
+                return []
+            return svc_boxsets.search(self.application.client, self.query)
+        except Exception:
+            return []
 
     def search_people(self):
         """GET /catalog/people; the row is optional, so a failure just hides it."""
@@ -1179,7 +1195,7 @@ class HomeWindow(xbmcgui.WindowXML):
 
     def card_menu(self, control_id):
         item, row = self.context_card(control_id)
-        if item is None:
+        if item is None or item.get("type") == BOX_SET:  # A box set card has no item menu.
             return
         marks = svc_personal.state(item)
         entries = [("watched", "Mark as unwatched" if marks["watched"] else "Mark as watched"),
@@ -1413,4 +1429,8 @@ class HomeWindow(xbmcgui.WindowXML):
         if not 0 <= position < len(items):
             return
         item = items[position]
+        if item.get("type") == BOX_SET:
+            self.run_modal(lambda: self.application.open_screen(
+                "box_set", box_set_id=item["id"], library_id=item["library_id"]), control_id)
+            return
         self.run_modal(lambda: self.application.open_item(item), control_id)

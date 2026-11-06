@@ -2,8 +2,8 @@
 
 A hero (backdrop, title or logo, facts, synopsis) sits above a row of
 actions. Series add season capsules and an episode rail; every title can
-show its cast, trailers and extras, related titles and a facts table
-further down. Round Watchlist and Favorite toggles and a More menu (shuffle,
+show its cast, trailers and extras, a movie's box set, related titles and a
+facts table further down. BoxSetWindow reuses the layout for one box set. Round Watchlist and Favorite toggles and a More menu (shuffle,
 mark watched, go to series or season, media info, translation) follow the
 play actions. The page scrolls in zones:
 Python moves focus up and down between zones and slides the page so the
@@ -17,7 +17,8 @@ from urllib.parse import quote, urlsplit
 import xbmc
 import xbmcgui
 
-from . import present, svc_personal, svc_shuffle
+from . import present, svc_boxsets, svc_personal, svc_shuffle
+from .api import ApiError
 from .present import is_unwatched
 from .media import (available_versions, default_version, format_time, is_multipart, resume_position,
                     subtitle_choices, version_label, version_name)
@@ -29,16 +30,17 @@ PLAY, RESUME, VERSION, START_OVER, NEXT_UP, SUBTITLES = 100, 101, 103, 104, 105,
 WATCHLIST, FAVORITE, MORE, AUDIO = 107, 108, 109, 110
 # Read more opens the full synopsis when it is longer than the three lines the hero shows.
 READ_MORE, PLOT_PREVIEW = 112, 230
-SEASONS, EPISODES, CAST, SIMILAR, EXTRAS, FACTS = 510, 520, 530, 540, 560, 570
-PAGE, CAST_GROUP, SIMILAR_GROUP, EXTRAS_GROUP, FACTS_GROUP = 1000, 3000, 4000, 5000, 6000
+SEASONS, EPISODES, CAST, SIMILAR, BOXSET, EXTRAS, FACTS = 510, 520, 530, 540, 550, 560, 570
+PAGE, CAST_GROUP, SIMILAR_GROUP, BOXSET_GROUP, EXTRAS_GROUP, FACTS_GROUP = 1000, 3000, 4000, 4500, 5000, 6000
 SUPERTITLE, TITLE, TITLE2 = 1101, 1102, 1103
 CHIP, CHIP_LABEL, BADGE, BADGE_LABEL, META = 1201, 1202, 1211, 1221, 1230
 # A button's group id is 1300 + its id; the order is the on-screen order.
 BUTTON_ORDER = (NEXT_UP, PLAY, RESUME, START_OVER, VERSION, AUDIO, SUBTITLES, WATCHLIST, FAVORITE, MORE)
 CAPSULES = (NEXT_UP, PLAY)
-ZONES = ("synopsis", "buttons", "seasons", "episodes", "cast", "extras", "similar", "facts")
+# Android puts a movie's box set between the trailers and More Like This.
+ZONES = ("synopsis", "buttons", "seasons", "episodes", "cast", "extras", "boxset", "similar", "facts")
 ZONE_CONTROLS = {"synopsis": READ_MORE, "seasons": SEASONS, "episodes": EPISODES, "cast": CAST, "extras": EXTRAS,
-                 "similar": SIMILAR, "facts": FACTS}
+                 "boxset": BOXSET, "similar": SIMILAR, "facts": FACTS}
 
 LEFT = 100
 TEXT_RIGHT = LEFT + 1080
@@ -54,6 +56,7 @@ SECTIONS_TOP_SERIES = 1100
 CAST_HEIGHT = 400
 EXTRAS_HEIGHT = 400
 SIMILAR_HEIGHT = 460
+BOXSET_HEIGHT = 460
 MAX_FACTS = 12
 # A scrolled-to section's heading sits this far from the top of the screen.
 SECTION_SCROLL_TOP = 140
@@ -80,6 +83,8 @@ MONTHS = ("January", "February", "March", "April", "May", "June", "July", "Augus
           "November", "December")
 # Titles the profile can rate 1 to 5 stars from the More menu (svc_personal.set_rating).
 RATED_KINDS = ("movie", "series")
+BOX_SET_UNAVAILABLE = ("This box set isn't available. Box sets may be turned off for this library, "
+                       "or too few of its movies are here.")
 
 
 def _text(value):
@@ -332,6 +337,10 @@ class DetailsWindow(xbmcgui.WindowXML):
         self.episode_cache = {}
         self.cast = []
         self.similar = []
+        # The box set row: the box set, its movies in release order, and whether Explore all ends it.
+        self.box_set = None
+        self.box_set_movies = []
+        self.box_set_explore = False
         self.extras = []
         self.facts = []
         self.visible_buttons = []
@@ -343,6 +352,7 @@ class DetailsWindow(xbmcgui.WindowXML):
         self.scroll_offset = 0
         self.cast_top = SECTIONS_TOP
         self.similar_top = SECTIONS_TOP
+        self.boxset_top = SECTIONS_TOP
         self.extras_top = SECTIONS_TOP
         self.facts_top = SECTIONS_TOP
         # Server capabilities, read once per page when the More menu needs them.
@@ -377,6 +387,7 @@ class DetailsWindow(xbmcgui.WindowXML):
         elif zones:
             # Read more sits above the buttons but is never where the page opens.
             self.focus_zone(next((zone for zone in zones if zone != "synopsis"), zones[0]))
+        self.load_box_set()
         self.load_similar()
 
     def onAction(self, action):
@@ -454,6 +465,8 @@ class DetailsWindow(xbmcgui.WindowXML):
             item = self.selected(SIMILAR, self.similar)
             if item is not None:
                 self.application.open_item(item)
+        elif control_id == BOXSET:
+            self.open_box_set_card()
         elif control_id in (WATCHLIST, FAVORITE):
             self.toggle_mark("watchlist" if control_id == WATCHLIST else "favorite")
         elif control_id == MORE:
@@ -873,19 +886,71 @@ class DetailsWindow(xbmcgui.WindowXML):
         self.setProperty("silo.has_similar", "true" if self.similar else "")
         self.layout_sections()
 
+    # ---------------------------------------------------------------- box set
+    def load_box_set(self):
+        """A movie's box set: its movies in release order, then Explore all (Android TvBoxSetRow)."""
+        found = None
+        if self.item.get("type") == "movie" and self.item.get("content_id"):
+            try:
+                if self.application.box_sets_on():
+                    found = svc_boxsets.for_item(self.application.client, self.item["content_id"])
+            except Exception:  # The row is optional; never let it break the page.
+                found = None
+        self.show_box_set(found, explore=True)
+
+    def show_box_set(self, found, explore, title=None, select=None):
+        """Fill the box set row. On a movie's page the film on screen is tagged and selected."""
+        self.box_set = found["box_set"] if found else None
+        self.box_set_movies = found["items"] if found else []
+        self.box_set_explore = bool(explore and self.box_set_movies)
+        current = self.item.get("content_id")
+        entries = []
+        for movie in self.box_set_movies:
+            entry = card_list_item(movie, self.application.image)
+            entry.setProperty("silo.marked", "true" if explore and movie.get("content_id") == current else "")
+            entries.append(entry)
+        if self.box_set_explore:
+            entry = xbmcgui.ListItem(label="Explore all", label2=svc_boxsets.film_count(self.box_set["movie_count"]))
+            entry.setProperty("silo.explore", "true")
+            entries.append(entry)
+        control = self.getControl(BOXSET)
+        control.reset()
+        control.addItems(entries)
+        if select is None:
+            select = next((index for index, movie in enumerate(self.box_set_movies)
+                           if explore and movie.get("content_id") == current), 0)
+        if entries:
+            control.selectItem(max(0, min(select, len(entries) - 1)))
+        self.setProperty("silo.boxset_title", title or (self.box_set or {}).get("title", ""))
+        self.setProperty("silo.has_boxset", "true" if self.box_set_movies else "")
+        self.layout_sections()
+
+    def open_box_set_card(self):
+        position = self.getControl(BOXSET).getSelectedPosition()
+        if self.box_set_explore and position == len(self.box_set_movies):
+            self.application.open_screen("box_set", box_set_id=self.box_set["id"],
+                                         library_id=self.box_set["library_id"])
+        elif 0 <= position < len(self.box_set_movies):
+            movie = self.box_set_movies[position]
+            if movie.get("content_id") != self.item.get("content_id"):
+                self.application.open_item(movie)
+
     def layout_sections(self):
-        """Stack the sections below the rail: cast, trailers, related, details."""
+        """Stack the sections below the rail: cast, trailers, box set, related, details."""
         has_rail = bool(self.seasons or self.episodes)
         top = SECTIONS_TOP_SERIES if has_rail else SECTIONS_TOP
         self.cast_top = top
         top += CAST_HEIGHT if self.cast else 0
         self.extras_top = top
         top += EXTRAS_HEIGHT if self.extras else 0
+        self.boxset_top = top
+        top += BOXSET_HEIGHT if self.box_set_movies else 0
         self.similar_top = top
         top += SIMILAR_HEIGHT if self.similar else 0
         self.facts_top = top
         self.getControl(CAST_GROUP).setPosition(0, self.cast_top)
         self.getControl(EXTRAS_GROUP).setPosition(0, self.extras_top)
+        self.getControl(BOXSET_GROUP).setPosition(0, self.boxset_top)
         self.getControl(SIMILAR_GROUP).setPosition(0, self.similar_top)
         self.getControl(FACTS_GROUP).setPosition(0, self.facts_top)
 
@@ -1123,6 +1188,7 @@ class DetailsWindow(xbmcgui.WindowXML):
             "episodes": bool(self.episodes),
             "cast": bool(self.cast),
             "extras": bool(self.extras),
+            "boxset": bool(self.box_set_movies),
             "similar": bool(self.similar),
             "facts": bool(self.facts),
         }
@@ -1156,9 +1222,114 @@ class DetailsWindow(xbmcgui.WindowXML):
         self.scroll_to(zone)
 
     def scroll_to(self, zone):
-        tops = {"cast": self.cast_top, "extras": self.extras_top, "similar": self.similar_top,
-                "facts": self.facts_top}
+        tops = {"cast": self.cast_top, "extras": self.extras_top, "boxset": self.boxset_top,
+                "similar": self.similar_top, "facts": self.facts_top}
         offset = max(0, tops[zone] - SECTION_SCROLL_TOP) if zone in tops else 0
         if offset != self.scroll_offset:
             self.scroll_offset = offset
             self.getControl(PAGE).setPosition(0, -offset)
+
+
+class BoxSetWindow(DetailsWindow):
+    """One box set (Android TvBoxSetScreen): the details hero with Play on the next movie to
+    watch, then the box set's movies in release order. Coming back from a movie or the
+    player reads the box set again, so the watched count and Play follow."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.box_set_id = None
+        self.library_id = None
+        self.found = None
+
+    def onInit(self):
+        if self.initialized:
+            return
+        self.initialized = True
+        self.show_plot = self.application.options()["show_plot"]
+        self.show_found()
+        if PLAY in self.focusable_buttons:
+            self.focus_control(PLAY)
+        elif self.box_set_movies:
+            self.focus_zone("boxset")
+
+    def show_found(self, select=None):
+        box_set = self.found["box_set"]
+        self.item = {"type": "box_set", "title": box_set["title"], "overview": box_set["overview"]}
+        self.show_box_set(self.found, explore=False, title="Movies", select=select)
+        self.update_actions()
+        self.show_hero()
+
+    def update_actions(self):
+        movies = self.box_set_movies
+        self.play_label = svc_boxsets.play_label(self.box_set, movies) if movies else ""
+        set_properties(self, {
+            "silo.playable": "true" if movies else "",
+            "silo.has_file": "true" if movies else "",
+            "silo.play_label": self.play_label,
+            "silo.resume": "", "silo.resume_button": "", "silo.multi_version": "", "silo.continue": "",
+            "silo.marks": "", "silo.has_subtitles": "", "silo.has_audio_choice": "",
+        })
+        self.visible_buttons = [PLAY] if movies else []
+        self.focusable_buttons = list(self.visible_buttons)
+        self.layout_buttons()
+
+    def show_hero(self, episode=None):
+        box_set = self.box_set
+        title, title2 = split_title(box_set["title"])
+        overview = box_set["overview"] if self.show_plot else ""
+        self.hero_overview = overview
+        set_properties(self, {
+            "silo.supertitle": "", "silo.title": title.upper(), "silo.title2": title2.upper(), "silo.logo": "",
+            "silo.rating": "", "silo.meta": svc_boxsets.hero_facts(box_set), "silo.plot": overview,
+            "silo.plot_more": "true" if len(overview) > PLOT_PREVIEW else "", "silo.credit": "",
+            "silo.backdrop": self.application.image(box_set, "backdrop"),
+        })
+        self.layout_title(False, bool(title2))
+        self.layout_meta("", [])
+
+    def _click(self, control_id):
+        if control_id == PLAY:
+            self.play_box_set()
+        elif control_id == BOXSET:
+            movie = self.selected(BOXSET, self.box_set_movies)
+            if movie is not None:
+                self.application.open_item(movie)
+                self.reload()
+        elif control_id == READ_MORE:
+            super()._click(control_id)
+
+    def play_box_set(self):
+        """Play the next movie to watch; the profile's resume setting decides where it starts."""
+        movie = svc_boxsets.next_movie(self.box_set_movies)
+        if movie is None:
+            return
+        item = self.application.client.item(movie["content_id"])
+        if isinstance(item, dict):
+            self.application.play(item)
+        self.reload()
+
+    def reload(self):
+        position = self.getControl(BOXSET).getSelectedPosition()
+        found = self.application.guard(lambda: svc_boxsets.load(self.application.client, self.box_set_id,
+                                                                self.library_id))
+        if found and found["items"]:
+            self.found = found
+            self.show_found(select=position)
+
+
+def open_box_set(application, box_set_id, library_id):
+    """Open one box set of one library; a 404 means box sets are off there or too few movies remain."""
+    try:
+        found = svc_boxsets.load(application.client, box_set_id, library_id)
+    except ApiError as exc:
+        if exc.status != 404:
+            raise
+        found = None
+    if not found or not found["items"]:
+        application.dialog.ok("Box set", BOX_SET_UNAVAILABLE)
+        return
+    window = BoxSetWindow("SiloDetails.xml", application.addon.getAddonInfo("path"), "Default", "1080i")
+    window.application, window.box_set_id, window.library_id, window.found = (application, box_set_id,
+                                                                              library_id, found)
+    window.doModal()
+    del window

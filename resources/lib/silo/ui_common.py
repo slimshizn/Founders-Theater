@@ -4,7 +4,7 @@ import threading
 
 import xbmcgui
 
-from . import present
+from . import present, svc_boxsets
 
 BACK_ACTIONS = frozenset({9, 10, 92, 216, 247, 257, 61448})
 ACTION_LEFT, ACTION_RIGHT, ACTION_UP, ACTION_DOWN = 1, 2, 3, 4
@@ -68,6 +68,28 @@ def card_list_item(item, image, wide=False):
     if data["progress"]:
         try:
             result.getVideoInfoTag().setResumePoint(float(data["progress"]), 100.0)
+        except (AttributeError, TypeError):
+            pass
+    return result
+
+
+def box_set_list_item(found, image):
+    """A search result's box set card: its poster under two sleeves, a Box set badge, the film
+    count in the corner and the watched share as the progress bar (Android TvCatalogGrid).
+    Property silo.box_set ("true") switches the card's skin to that look."""
+    result = xbmcgui.ListItem(label=found["title"], label2=svc_boxsets.card_caption(found))
+    poster = image(found, "poster")
+    if poster:
+        result.setArt({"poster": poster, "thumb": poster})
+    percent = svc_boxsets.watched_percent(found)
+    result.setProperty("silo.box_set", "true")
+    result.setProperty("silo.corner", svc_boxsets.film_count(found["movie_count"]))
+    result.setProperty("silo.progress", str(percent) if percent else "")
+    result.setProperty("silo.watched", "")
+    result.setProperty("silo.plot", found["overview"])
+    if percent:
+        try:
+            result.getVideoInfoTag().setResumePoint(float(percent), 100.0)
         except (AttributeError, TypeError):
             pass
     return result

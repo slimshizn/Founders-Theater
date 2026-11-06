@@ -658,6 +658,10 @@ class Application:
                                if isinstance(library, dict) and library.get("id") is not None]
         return [library for library in self._libraries if library.get("type") in self.LIBRARY_KINDS.get(kind, ())]
 
+    def box_sets_on(self):
+        """Some movie library this profile sees gathers box sets (Android asks no server otherwise)."""
+        return any(library.get("box_sets_enabled") is True for library in self.video_libraries("movie"))
+
     def browse(self, params, cursor=None):
         """One /catalog page: items, the next cursor when there is more, and the total."""
         query = dict(params, limit=self.options()["page_size"])
@@ -1114,6 +1118,7 @@ class Application:
         "library_sections": ("ui_browse", "open_library_sections"),
         "personal": ("ui_browse", "open_personal"),
         "person": ("ui_browse", "open_person"),
+        "box_set": ("ui_details", "open_box_set"),
         "requests": ("ui_requests", "open_requests"),
         "manage_profiles": ("ui_people", "manage_profiles"),
         "subtitle_search": ("ui_subtitles", "search_subtitles"),

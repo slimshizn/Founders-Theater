@@ -16,6 +16,10 @@ OUT = ROOT / "resources/skins/Default/1080i/SiloHome.xml"
 
 TEXT, SECONDARY, MUTED, TAB_IDLE = "FFEDEDED", "BFEDEDED", "B3EDEDED", "9EEDEDED"
 CAPTION_IDLE, BLACK, SURFACE = "C7EDEDED", "FF000000", "FF15171C"
+# Search leads the browse grid with box sets; no other list shows them.
+BOX_SET_GRID = 500
+# A box set card's two sleeves above its poster (the web's surface-raised and surface-hover).
+SLEEVE_BACK, SLEEVE_FRONT = "FF23262E", "FF2F333D"
 
 SLOTS, SLOT_BASE = 12, 3000
 TABS = (("home", "Home", 210, 215, 124), ("movies", "Movies", 211, 216, 148),
@@ -142,6 +146,14 @@ def card_art(width, height, mask, art, wide, focused, list_id):
     parts = []
     if focused:
         parts.append(image(-24, -24, width + 48, height + 48, "glow16.png", border=48, condition=has_focus))
+    if list_id == BOX_SET_GRID:
+        # A box set reads as a stack of films: two sleeves peek above the poster, which covers the rest.
+        box_set = "!String.IsEmpty(ListItem.Property(silo.box_set))"
+        back, front = width // 10, width // 20
+        parts += [image(back, -12, width - 2 * back, 40, "round16.png", color=SLEEVE_BACK, border=16,
+                        condition=box_set),
+                  image(front, -6, width - 2 * front, 40, "round16.png", color=SLEEVE_FRONT, border=16,
+                        condition=box_set)]
     parts += [image(0, 0, width, height, "round16.png", color=SURFACE, border=16),
               image(0, 0, width, height, "$INFO[ListItem.Art({})]".format(art), diffuse=mask, aspect="scale",
                     background=True)]
@@ -155,6 +167,13 @@ def card_art(width, height, mask, art, wide, focused, list_id):
         watched = "!String.IsEmpty(ListItem.Property(silo.watched))"
         parts += [image(width - 53, 11, 42, 42, "circle.png", color="FFFFFFFF", condition=watched),
                   image(width - 45, 19, 26, 26, "icon_check.png", color=BLACK, condition=watched)]
+    if list_id == BOX_SET_GRID:
+        box_set = "!String.IsEmpty(ListItem.Property(silo.box_set))"
+        parts += [image(12, 12, 104, 34, "round6.png", color="CC000000", border=6, condition=box_set),
+                  label(12, 12, 104, 34, "BOX SET", "font12", TEXT, "center", condition=box_set),
+                  image(width - 104, 12, 92, 34, "round6.png", color="CC000000", border=6, condition=box_set),
+                  label(width - 104, 12, 92, 34, "$INFO[ListItem.Property(silo.corner)]", "font12", TEXT,
+                        "center", condition=box_set)]
     parts.append(progress(16, height - 18, width - 32))
     if focused:
         parts.append(image(-4, -4, width + 8, height + 8, "ring16.png", color=TEXT, border=24,

@@ -126,6 +126,7 @@ class DetailsWindowTests(unittest.TestCase):
         self.app.is_playable.side_effect = lambda item: item.get("type") in ("movie", "episode")
         self.app.similar.return_value = []
         self.app.episodes.side_effect = episodes_for
+        self.app.box_sets_on.return_value = False
 
     def window(self, item, children=()):
         window = DetailsWindow("SiloDetails.xml", ".")
@@ -927,6 +928,143 @@ class DetailsWindowTests(unittest.TestCase):
         self.assertTrue(window.closed)
 
 
+def box_set_found(count=3, played=()):
+    return {"box_set": {"id": "1241", "library_id": "2", "title": "Example Box Set", "overview": "Films.",
+                        "poster_url": "", "backdrop_url": "/artwork/b.jpg", "movie_count": count,
+                        "played_count": len(played), "first_year": 2001, "last_year": 2011},
+            "items": [{"content_id": "movie:{}".format(index), "type": "movie", "title": "Film {}".format(index),
+                       "user_state": {"played": index in played}} for index in range(1, count + 1)]}
+
+
+class BoxSetTests(unittest.TestCase):
+    """A movie's box set row and the box set page (Android TvBoxSetRow and TvBoxSetScreen)."""
+
+    setUp = DetailsWindowTests.setUp
+    window = DetailsWindowTests.window
+    series_window = DetailsWindowTests.series_window
+
+    def movie_window(self, content_id="movie:2", found=None):
+        self.app.box_sets_on.return_value = True
+        item = dict(movie_item(), content_id=content_id)
+        with patch.object(ui_details.svc_boxsets, "for_item", return_value=found or box_set_found()) as for_item:
+            window = self.window(item)
+            window.onInit()
+        for_item.assert_called_once_with(self.app.client, content_id)
+        return window
+
+    def test_a_movie_shows_its_box_set_between_extras_and_similar(self):
+        window = self.movie_window()
+        entries = window.getControl(ui_details.BOXSET).addItems.call_args[0][0]
+        self.assertEqual([entry.label for entry in entries], ["Film 1", "Film 2", "Film 3", "Explore all"])
+        self.assertEqual([entry.properties.get("silo.marked") for entry in entries[:3]], ["", "true", ""])
+        self.assertEqual(entries[3].properties["silo.explore"], "true")
+        self.assertEqual(entries[3].label2, "3 films")
+        window.getControl(ui_details.BOXSET).selectItem.assert_called_with(1)  # the film on screen
+        self.assertEqual(window.properties["silo.boxset_title"], "Example Box Set")
+        self.assertEqual(window.properties["silo.has_boxset"], "true")
+        self.assertEqual(ui_details.ZONES.index("boxset"), ui_details.ZONES.index("extras") + 1)
+        self.assertEqual(ui_details.ZONES.index("similar"), ui_details.ZONES.index("boxset") + 1)
+        self.assertIn("boxset", window.available_zones())
+        window.getControl(ui_details.BOXSET_GROUP).setPosition.assert_called_with(0, ui_details.SECTIONS_TOP)
+        window.similar = [{"content_id": "movie:9", "type": "movie"}]
+        window.layout_sections()
+        window.getControl(ui_details.SIMILAR_GROUP).setPosition.assert_called_with(
+            0, ui_details.SECTIONS_TOP + ui_details.BOXSET_HEIGHT)
+
+    def test_box_set_cards_open_movies_and_explore_all_opens_the_box_set(self):
+        window = self.movie_window()
+        row = window.getControl(ui_details.BOXSET)
+        row.getSelectedPosition.return_value = 1  # the film on screen: nothing to open
+        window.onClick(ui_details.BOXSET)
+        self.app.open_item.assert_not_called()
+        row.getSelectedPosition.return_value = 2
+        window.onClick(ui_details.BOXSET)
+        self.app.open_item.assert_called_once_with(box_set_found()["items"][2])
+        row.getSelectedPosition.return_value = 3
+        window.onClick(ui_details.BOXSET)
+        self.app.open_screen.assert_called_once_with("box_set", box_set_id="1241", library_id="2")
+
+    def test_no_box_set_request_without_box_sets_or_for_other_kinds(self):
+        with patch.object(ui_details.svc_boxsets, "for_item") as for_item:
+            window = self.window(movie_item())
+            window.onInit()
+            self.app.box_sets_on.return_value = True
+            self.series_window()
+        for_item.assert_not_called()
+        self.assertEqual(window.properties["silo.has_boxset"], "")
+        self.assertNotIn("boxset", window.available_zones())
+
+    def test_a_failed_box_set_read_leaves_the_row_hidden(self):
+        self.app.box_sets_on.return_value = True
+        with patch.object(ui_details.svc_boxsets, "for_item", side_effect=OSError("offline")):
+            window = self.window(movie_item())
+            window.onInit()
+        self.assertEqual(window.properties["silo.has_boxset"], "")
+
+    def box_set_window(self, found=None):
+        window = ui_details.BoxSetWindow("SiloDetails.xml", ".")
+        window.application, window.box_set_id, window.library_id = self.app, "1241", "2"
+        window.found = found or box_set_found(played=(1,))
+        window.onInit()
+        return window
+
+    def test_the_box_set_page_shows_facts_play_and_its_movies(self):
+        window = self.box_set_window()
+        self.assertEqual(window.properties["silo.title"], "EXAMPLE BOX SET")
+        self.assertEqual(window.properties["silo.meta"], "Box set · 3 films · 2001 – 2011 · 1 of 3 watched")
+        self.assertEqual(window.properties["silo.play_label"], "Continue · Film 2")
+        self.assertEqual(window.properties["silo.playable"], "true")
+        self.assertEqual(window.properties["silo.marks"], "")
+        self.assertEqual(window.properties["silo.boxset_title"], "Movies")
+        self.assertEqual(window.focusable_buttons, [ui_details.PLAY])
+        self.assertEqual(window.focus, ui_details.PLAY)
+        entries = window.getControl(ui_details.BOXSET).addItems.call_args[0][0]
+        self.assertEqual([entry.label for entry in entries], ["Film 1", "Film 2", "Film 3"])  # no Explore all
+        self.assertEqual(window.available_zones(), ["buttons", "boxset"])
+
+    def test_play_starts_the_next_movie_and_the_page_follows(self):
+        window = self.box_set_window()
+        self.app.client.item.return_value = {"content_id": "movie:2", "type": "movie"}
+        after = box_set_found(played=(1, 2))
+        with patch.object(ui_details.svc_boxsets, "load", return_value=after) as load:
+            window.onClick(ui_details.PLAY)
+        self.app.client.item.assert_called_once_with("movie:2")
+        self.app.play.assert_called_once_with({"content_id": "movie:2", "type": "movie"})
+        load.assert_called_once_with(self.app.client, "1241", "2")
+        self.assertEqual(window.properties["silo.play_label"], "Continue · Film 3")
+        self.assertEqual(window.properties["silo.meta"], "Box set · 3 films · 2001 – 2011 · 2 of 3 watched")
+
+    def test_a_movie_card_opens_the_movie_and_keeps_its_place(self):
+        window = self.box_set_window()
+        row = window.getControl(ui_details.BOXSET)
+        row.getSelectedPosition.return_value = 2
+        with patch.object(ui_details.svc_boxsets, "load", return_value=box_set_found()):
+            window.onClick(ui_details.BOXSET)
+        self.app.open_item.assert_called_once_with(box_set_found(played=(1,))["items"][2])
+        row.selectItem.assert_called_with(2)
+
+    def test_opening_an_unavailable_box_set_explains_why(self):
+        for outcome in (ui_details.ApiError(404, "Not found"), {"box_set": None}):
+            self.app.reset_mock()
+            effect = outcome if isinstance(outcome, Exception) else None
+            with patch.object(ui_details.svc_boxsets, "load", side_effect=effect, return_value=None), \
+                    patch.object(ui_details, "BoxSetWindow") as window_class:
+                ui_details.open_box_set(self.app, "1241", "2")
+            self.app.dialog.ok.assert_called_once_with("Box set", ui_details.BOX_SET_UNAVAILABLE)
+            window_class.assert_not_called()
+        with patch.object(ui_details.svc_boxsets, "load", side_effect=ui_details.ApiError(500, "Broken")):
+            with self.assertRaises(ui_details.ApiError):
+                ui_details.open_box_set(self.app, "1241", "2")
+
+    def test_opening_a_box_set_shows_its_window(self):
+        with patch.object(ui_details.svc_boxsets, "load", return_value=box_set_found()), \
+                patch.object(ui_details, "BoxSetWindow") as window_class:
+            ui_details.open_box_set(self.app, "1241", "2")
+        window = window_class.return_value
+        self.assertEqual((window.box_set_id, window.library_id), ("1241", "2"))
+        window.doModal.assert_called_once()
+
+
 class DetailsSkinTests(unittest.TestCase):
     def setUp(self):
         self.tree = ET.parse(SKIN)
@@ -962,8 +1100,8 @@ class DetailsSkinTests(unittest.TestCase):
     def test_ids_are_unique_and_cover_the_controller(self):
         ids = [int(node.attrib["id"]) for node in self.tree.iter("control") if "id" in node.attrib]
         self.assertEqual(len(ids), len(set(ids)))
-        required = {100, 101, 103, 104, 105, 106, 107, 108, 109, 510, 520, 530, 540, 560, 570, 1000, 3000, 4000,
-                    5000, 6000, 1101, 1102, 1103, 1201, 1202, 1230}
+        required = {100, 101, 103, 104, 105, 106, 107, 108, 109, 510, 520, 530, 540, 550, 560, 570, 1000, 3000,
+                    4000, 4500, 5000, 6000, 1101, 1102, 1103, 1201, 1202, 1230}
         required |= {1300 + control_id for control_id in ui_details.BUTTON_ORDER}
         required |= {ui_details.BADGE + slot for slot in range(ui_details.MAX_BADGES)}
         self.assertTrue(required.issubset(ids), required - set(ids))

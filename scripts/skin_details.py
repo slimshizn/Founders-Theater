@@ -245,7 +245,10 @@ def cast_section():
              self_links(530), cast_person(False), cast_person(True))
 
 
-def similar_card(focused):
+def poster_card(list_id, focused, box_set=False):
+    """A poster card for More like this and the box set row. The box set row tags
+    the film on screen (silo.marked) and ends with an Explore all card (silo.explore)."""
+    has_focus = "Control.HasFocus({})".format(list_id)
     parts = [
         image(16, 28, 176, 264, '<texture border="16" colordiffuse="{}">round16.png</texture>'.format(PLACEHOLDER)),
         image(16, 28, 176, 264, '<texture diffuse="mask_poster.png">$INFO[ListItem.Art(poster)]</texture>'
@@ -256,8 +259,21 @@ def similar_card(focused):
         '<info>ListItem.PercentPlayed</info>{}</control>'.format(
             TEXT, visible("!String.IsEmpty(ListItem.Property(silo.progress))")),
     ]
+    if box_set:
+        explore = "!String.IsEmpty(ListItem.Property(silo.explore))"
+        marked = "!String.IsEmpty(ListItem.Property(silo.marked))"
+        parts += [
+            image(64, 120, 80, 80, '<texture colordiffuse="33FFFFFF">circle.png</texture>', visible(explore)),
+            label(64, 120, 80, 76, "›", "font36_title", TEXT, "<align>center</align><aligny>center</aligny>"
+                  + visible(explore)),
+            image(16, 28, 176, 264, '<texture border="24" colordiffuse="99EDEDED">ring16.png</texture>',
+                  visible(marked)),
+            image(40, 236, 128, 30, '<texture border="6" colordiffuse="E6EDEDED">round6.png</texture>',
+                  visible(marked)),
+            label(40, 236, 128, 30, "THIS FILM", "font12", "FF000000",
+                  "<align>center</align><aligny>center</aligny>" + visible(marked)),
+        ]
     if focused:
-        has_focus = "Control.HasFocus(540)"
         zoom = ('<animation effect="zoom" start="100" end="110" time="200" tween="cubic" easing="out" '
                 'center="104,160" condition="{}">Conditional</animation>').format(has_focus)
         parts = (['<control type="group"><left>0</left><top>0</top>{}'.format(zoom),
@@ -271,17 +287,27 @@ def similar_card(focused):
     return "".join(parts)
 
 
-def similar_section():
+def poster_section(group_id, list_id, condition, heading, box_set=False):
     return (
-        '      <control type="group" id="4000"><left>0</left><top>1500</top><width>1920</width><height>460</height>{}\n'
+        '      <control type="group" id="{}"><left>0</left><top>1500</top><width>1920</width><height>460</height>{}\n'
         "        {}\n"
-        '        <control type="list" id="540"><left>84</left><top>40</top><width>1836</width><height>390</height>'
+        '        <control type="list" id="{}"><left>84</left><top>40</top><width>1836</width><height>390</height>'
         '<orientation>horizontal</orientation><scrolltime tween="cubic" easing="out">200</scrolltime>{}\n'
         '          <itemlayout width="208" height="390">{}</itemlayout>\n'
         '          <focusedlayout width="208" height="390">{}</focusedlayout>\n'
         '        </control>\n      </control>'
-    ).format(visible(has("silo.has_similar")), label(100, 0, 1200, 50, "More like this", "font36_title", TEXT),
-             self_links(540), similar_card(False), similar_card(True))
+    ).format(group_id, visible(condition), label(100, 0, 1200, 50, heading, "font36_title", TEXT), list_id,
+             self_links(list_id), poster_card(list_id, False, box_set), poster_card(list_id, True, box_set))
+
+
+def similar_section():
+    return poster_section(4000, 540, has("silo.has_similar"), "More like this")
+
+
+def box_set_section():
+    """A movie's box set (heading: the box set's name), or a box set page's Movies row."""
+    return poster_section(4500, 550, has("silo.has_boxset"), "$INFO[Window.Property(silo.boxset_title)]",
+                          box_set=True)
 
 
 def extra_card(focused):
@@ -391,7 +417,7 @@ def hero():
 
 def build():
     body = "\n".join([hero()] + [button(index) for index in range(len(BUTTONS))]
-                     + [season_list(), episode_list(), cast_section(), extras_section(), similar_section(),
+                     + [season_list(), episode_list(), cast_section(), extras_section(), box_set_section(), similar_section(),
                         facts_section()])
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
