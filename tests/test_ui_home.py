@@ -636,8 +636,28 @@ class TopBarPanelTests(unittest.TestCase):
         window.application.open_screen.assert_called_with("collections", library=None)
         window.onFocus(211)
         window.getControl(ui_home.LIB_LIST).getSelectedPosition.return_value = 1
-        window.onClick(ui_home.LIB_LIST)  # commits that library
-        self.assertEqual((window.properties["silo.tab"], window.library), ("movies", self.libraries(2)["movie"][0]))
+        window.onClick(ui_home.LIB_LIST)  # opens that library's sections; Browse commits it
+        self.assertEqual(window.focus, ui_home.FLYOUT_LIST)
+        self.assertEqual(window.flyout_rows, ["recommended", "browse", "collections"])
+        window.application.browse.assert_not_called()
+
+    def test_the_flyout_follows_a_mouse_hover(self):
+        window = self.window(2, known={3: True, 4: False})
+        window.onFocus(211)
+        rows = window.getControl(ui_home.LIB_LIST)
+        flyout = window.getControl(ui_home.FLYOUT_LIST)
+        rows.getSelectedPosition.return_value = 2  # the pointer rests on Films 1
+        window.focus = ui_home.LIB_LIST
+        window.onFocus(ui_home.LIB_LIST)
+        self.assertEqual(window.flyout_rows, ["recommended", "browse"])
+        rows.getSelectedPosition.return_value = 1
+        window.onAction(Action(ui_home.ACTION_MOUSE_MOVE))
+        self.assertEqual(window.flyout_rows, ["recommended", "browse", "collections"])
+        window.getControl(ui_home.FLYOUT).setPosition.assert_called_with(
+            ui_home.LIB_WIDTH + ui_home.PANEL_GAP, ui_home.PANEL_ROW)
+        flyout.reset.reset_mock()
+        window.onAction(Action(ui_home.ACTION_MOUSE_MOVE))  # same row: the flyout is left alone
+        flyout.reset.assert_not_called()
 
     def test_one_library_shows_its_sections_directly(self):
         window = self.window(1)

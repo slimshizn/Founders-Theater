@@ -9,6 +9,7 @@ from . import present
 BACK_ACTIONS = frozenset({9, 10, 92, 216, 247, 257, 61448})
 ACTION_LEFT, ACTION_RIGHT, ACTION_UP, ACTION_DOWN = 1, 2, 3, 4
 ACTION_SELECT = 7
+ACTION_MOUSE_MOVE = 107
 # Android waits about 150 ms after focus settles before swapping the hero.
 SETTLE_SECONDS = 0.15
 

@@ -7,7 +7,7 @@ from urllib.parse import quote
 import xbmcgui
 
 from . import present, svc_personal
-from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, Debouncer,
+from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_MOUSE_MOVE, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, Debouncer,
                         card_list_item, set_properties)
 
 # Control ids; scripts/skin_home.py writes the matching SiloHome.xml.
@@ -186,6 +186,7 @@ class HomeWindow(xbmcgui.WindowXML):
         self.panel_kind = None
         self.panel_rows = []
         self.flyout_rows = []
+        self.flyout_for = None  # The library row the flyout was built for.
         self.collections_known = {}
         self.collection_checks = set()
         # Set when Down left a panel: Kodi reports the focus change before the key, and
@@ -409,6 +410,7 @@ class HomeWindow(xbmcgui.WindowXML):
         if self.has_collections(library):
             sections.append("collections")
         self.flyout_rows = sections
+        self.flyout_for = self.getControl(LIB_LIST).getSelectedPosition()
         flyout = self.getControl(FLYOUT_LIST)
         flyout.reset()
         flyout.addItems([xbmcgui.ListItem(label=SECTION_LABELS[section], offscreen=True) for section in sections])
@@ -420,6 +422,11 @@ class HomeWindow(xbmcgui.WindowXML):
         else:
             position = max(0, self.getControl(LIB_LIST).getSelectedPosition())
             self.getControl(FLYOUT).setPosition(LIB_WIDTH + PANEL_GAP, PANEL_ROW * position)
+
+    def follow_library_row(self):
+        """Rebuild the flyout when the focused library row changed (a mouse hover sends no Up/Down)."""
+        if self.getControl(LIB_LIST).getSelectedPosition() != self.flyout_for:
+            self.update_flyout()
 
     def enter_panel(self, kind):
         """Down on Movies or Series moves into its panel (Android: Down hands focus to the selector)."""
@@ -436,12 +443,11 @@ class HomeWindow(xbmcgui.WindowXML):
             return TAB_BUTTONS["for_you"]
         return TAB_BUTTONS["movies" if self.panel_kind == "movie" else "series"]
 
-    def commit_library(self):
-        """Select on a library row: browse that library (Android commits the scope)."""
-        kind = self.panel_kind
-        if kind is not None:
-            self.show_library(kind, self.panel_library())
-            self.setFocusId(LIBRARY_CHIP)
+    def open_flyout(self):
+        """Select on a library row moves into its sections, where Browse opens the library."""
+        if self.panel_kind is not None:
+            self.follow_library_row()
+            self.setFocusId(FLYOUT_LIST)
 
     def choose_section(self):
         kind, library = self.panel_kind, self.panel_library()
@@ -1270,6 +1276,8 @@ class HomeWindow(xbmcgui.WindowXML):
             self.hero_debouncer.trigger()
         elif control_id in LIBRARY_TABS:
             self.prepare_panel(LIBRARY_TABS[control_id])
+        elif control_id == LIB_LIST:
+            self.follow_library_row()
         elif control_id == TAB_BUTTONS["for_you"]:
             self.place_for_you()
         elif control_id in (LIB_EXIT, FOR_YOU_EXIT):
@@ -1291,9 +1299,9 @@ class HomeWindow(xbmcgui.WindowXML):
             self.left_panel = False
             if action_id == ACTION_DOWN:
                 return
-        if focus == LIB_LIST and action_id in (ACTION_UP, ACTION_DOWN):
+        if focus == LIB_LIST and action_id in (ACTION_UP, ACTION_DOWN, ACTION_MOUSE_MOVE):
             # Kodi has already moved the selection: the flyout follows the focused library.
-            self.update_flyout()
+            self.follow_library_row()
             return
         if focus in PANEL_CONTROLS:
             return
@@ -1364,7 +1372,7 @@ class HomeWindow(xbmcgui.WindowXML):
         elif control_id in MENU_ITEMS:
             self.choose_menu(control_id)
         elif control_id == LIB_LIST:
-            self.commit_library()
+            self.open_flyout()
         elif control_id == FLYOUT_LIST:
             self.choose_section()
         elif control_id in FOR_YOU_ITEMS:
