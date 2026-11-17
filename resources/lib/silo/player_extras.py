@@ -10,6 +10,7 @@ tested without Kodi.
 """
 
 import math
+import re
 import time
 
 from . import present
@@ -99,14 +100,34 @@ def quality_options(plan):
     return entries if len(entries) > 1 else []
 
 
+# Words that only describe a track's format. Many files title every audio track with
+# its codec ("AAC (Advanced Audio Coding)", "ATSC A/52B (AC-3, E-AC-3)"), so a title
+# made of these and the language says nothing the label doesn't already show.
+_FORMAT_WORDS = frozenset("""
+    a aac ac advanced atmos atsc audio b ch channel channels codec coding dd ddp default digital dolby dts eac es
+    flac hd hra kbps layer lossless lpcm ma master mono mp mpeg opus original pcm plus stereo surround track
+    truehd vorbis with x and
+""".split())
+
+
+def _title_adds(title, language):
+    """The part of a track title worth showing next to its language, or ''."""
+    title = re.sub(r"\s*[\[(][^\])]*[\])]", "", title).strip(" -·:")
+    words = re.findall(r"[a-z]+", title.lower())
+    known = _FORMAT_WORDS | set(language.lower().split())
+    return title if any(word not in known for word in words) else ""
+
+
 def audio_track_label(track, index):
+    """"English · E-AC3 · 5.1", with a meaningful title kept: "English · Commentary · AAC · Stereo"."""
     track = track if isinstance(track, dict) else {}
-    name = str(track.get("title") or track.get("embedded_title") or "").strip()
-    language = str(track.get("language") or "").strip()
+    language = present.language_name(track.get("language"))
+    title = _title_adds(str(track.get("title") or track.get("embedded_title") or "").strip(), language)
     codec = str(track.get("codec") or "").upper()
     channels = track.get("channels")
     layout = {1: "Mono", 2: "Stereo", 6: "5.1", 8: "7.1"}.get(channels if isinstance(channels, int) else 0, "")
-    parts = [part for part in (name or language.upper(), codec, layout) if part]
+    # A track that names itself ("Commentary") needs no "Unknown" in front.
+    parts = [part for part in (language or ("" if title or not codec else "Unknown"), title, codec, layout) if part]
     return " · ".join(parts) or "Track {}".format(index + 1)
 
 

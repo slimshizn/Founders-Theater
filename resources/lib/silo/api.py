@@ -18,6 +18,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+CLIENT_NAME = "Founders Theater"
 
 class ApiError(Exception):
     def __init__(self, status, message, code="", headers=None):
@@ -199,7 +200,12 @@ class SiloClient:
             return self.store.get("access_token") or ""
 
     def headers(self, authenticated=True, profile=True):
-        headers = {"Accept": "application/json", "User-Agent": self.user_agent}
+        # X-Silo-Client names the app in Silo's request log, admin sessions and playback
+        # starts, as the Silo apps do; the version rides the User-Agent ("FoundersTheater/0.9.8").
+        headers = {"Accept": "application/json", "User-Agent": self.user_agent, "X-Silo-Client": CLIENT_NAME}
+        version = self.user_agent.partition("/")[2]
+        if version:
+            headers["X-Silo-Client-Version"] = version
         if getattr(self, "device_id", None):
             headers["X-Silo-Device-Id"] = self.device_id
         if authenticated:

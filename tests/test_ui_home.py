@@ -547,6 +547,22 @@ class BackTests(unittest.TestCase):
         self.assertTrue(window.closed)
         self.assertEqual(window.result, "quit_kodi")
 
+    def test_hide_quit_kodi_asks_with_exit_and_cancel_only(self):
+        window = open_window(make_application(options={"show_plot": True, "hide_quit_kodi": True}))
+        window.setFocusId(ui_home.TAB_BUTTONS["home"])
+        dialog = window.application.dialog.yesno
+        dialog.return_value = False  # Cancel, or Back inside the dialog: stay.
+        window.onAction(Action(BACK))
+        self.assertFalse(window.closed)
+        window.application.dialog.yesnocustom.assert_not_called()
+        args, kwargs = dialog.call_args
+        self.assertEqual(args, ("Exit Founders Theater", "Are you ready to exit Founders Theater?"))
+        self.assertEqual((kwargs["nolabel"], kwargs["yeslabel"], kwargs["defaultbutton"]), ("Cancel", "Exit", 10))
+        dialog.return_value = True
+        window.onAction(Action(BACK))
+        self.assertTrue(window.closed)
+        self.assertIsNone(window.result)  # Exit leaves Kodi running.
+
     def test_exit_is_immediate_when_asking_is_turned_off(self):
         window = open_window(make_application(options={"show_plot": True, "confirm_exit": False}))
         window.setFocusId(ui_home.TAB_BUTTONS["home"])

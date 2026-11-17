@@ -31,6 +31,26 @@ def _text(value):
     return str(value).strip() if value not in (None, "") else ""
 
 
+# Track and item languages arrive as ISO 639-1 or 639-2 codes.
+LANGUAGES = {"en": "English", "fr": "French", "de": "German", "es": "Spanish", "it": "Italian", "ja": "Japanese",
+             "ko": "Korean", "zh": "Chinese", "pt": "Portuguese", "ru": "Russian", "ar": "Arabic", "hi": "Hindi",
+             "nl": "Dutch", "sv": "Swedish", "da": "Danish", "no": "Norwegian", "fi": "Finnish", "pl": "Polish",
+             "tr": "Turkish", "cs": "Czech", "el": "Greek", "he": "Hebrew", "hu": "Hungarian", "th": "Thai"}
+LANGUAGE_CODES = {"eng": "en", "fre": "fr", "fra": "fr", "ger": "de", "deu": "de", "spa": "es", "ita": "it",
+                  "jpn": "ja", "kor": "ko", "chi": "zh", "zho": "zh", "por": "pt", "rus": "ru", "ara": "ar",
+                  "hin": "hi", "dut": "nl", "nld": "nl", "swe": "sv", "dan": "da", "nor": "no", "fin": "fi",
+                  "pol": "pl", "tur": "tr", "cze": "cs", "ces": "cs", "gre": "el", "ell": "el", "heb": "he",
+                  "hun": "hu", "tha": "th"}
+
+
+def language_name(code):
+    code = _text(code).lower()
+    if not code or code == "und":
+        return ""
+    code = LANGUAGE_CODES.get(code, code)
+    return LANGUAGES.get(code, code.upper())
+
+
 def is_video(item):
     return isinstance(item, dict) and (item.get("type") or item.get("media_type")) in VIDEO_TYPES
 

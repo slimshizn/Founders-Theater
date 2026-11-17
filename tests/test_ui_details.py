@@ -455,17 +455,17 @@ class DetailsWindowTests(unittest.TestCase):
         window.onInit()
         self.assertIn(ui_details.AUDIO, window.focusable_buttons)
         self.assertEqual(window.properties["silo.has_audio_choice"], "true")
-        self.assertEqual(window.hint(ui_details.AUDIO), "Audio: ENG · AC3 · 5.1 (Auto)")
+        self.assertEqual(window.hint(ui_details.AUDIO), "Audio: English · AC3 · 5.1 (Auto)")
         # Untouched, Play leaves audio to the usual preferences.
         self.app.play.return_value = None
         window.onClick(ui_details.PLAY)
         self.assertNotIn("audio_index", self.app.play.call_args.kwargs)
         self.app.dialog.select.return_value = 1
         window.onClick(ui_details.AUDIO)
-        self.assertEqual(self.app.dialog.select.call_args.args, ("Audio", ["ENG · AC3 · 5.1", "JPN · AAC · Stereo"]))
+        self.assertEqual(self.app.dialog.select.call_args.args, ("Audio", ["English · AC3 · 5.1", "Japanese · AAC · Stereo"]))
         self.assertEqual(self.app.dialog.select.call_args.kwargs, {"preselect": 0})
         self.assertEqual(self.app.remember_audio.call_args.args[2], 1)
-        self.assertEqual(window.hint(ui_details.AUDIO), "Audio: JPN · AAC · Stereo")
+        self.assertEqual(window.hint(ui_details.AUDIO), "Audio: Japanese · AAC · Stereo")
         window.onClick(ui_details.PLAY)
         self.assertEqual(self.app.play.call_args.kwargs["audio_index"], 1)
 

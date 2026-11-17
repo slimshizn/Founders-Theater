@@ -275,6 +275,14 @@
           <default>true</default>
           <control type="toggle" />
         </setting>
+        <setting id="hide_quit_kodi" type="boolean" label="32119" help="32120">
+          <level>0</level>
+          <default>false</default>
+          <dependencies>
+            <dependency type="enable" setting="confirm_exit">true</dependency>
+          </dependencies>
+          <control type="toggle" />
+        </setting>
       </group>
     </category>
   </section>

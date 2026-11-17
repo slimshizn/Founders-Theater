@@ -1369,11 +1369,16 @@ class HomeWindow(xbmcgui.WindowXML):
             self.close()
 
     def confirm_exit(self):
-        """Ask before leaving; focus starts on Cancel, and Back in the dialog also stays."""
-        answer = self.application.dialog.yesnocustom(
-            "Exit Founders Theater", "Are you ready to exit Founders Theater?",
-            customlabel="Quit Kodi", nolabel="Cancel", yeslabel="Exit",
-            defaultbutton=getattr(xbmcgui, "DLG_YESNO_NO_BTN", 10))
+        """Ask before leaving; focus starts on Cancel, and Back in the dialog also stays.
+        Hide Quit Kodi drops that button for systems where Kodi is the whole device (OSMC)."""
+        heading, message = "Exit Founders Theater", "Are you ready to exit Founders Theater?"
+        cancel = getattr(xbmcgui, "DLG_YESNO_NO_BTN", 10)
+        if self.application.options().get("hide_quit_kodi"):
+            answer = 1 if self.application.dialog.yesno(heading, message, nolabel="Cancel", yeslabel="Exit",
+                                                        defaultbutton=cancel) else 0
+        else:
+            answer = self.application.dialog.yesnocustom(heading, message, customlabel="Quit Kodi", nolabel="Cancel",
+                                                         yeslabel="Exit", defaultbutton=cancel)
         if answer in (1, 2):
             self.result = "quit_kodi" if answer == 2 else None
             self.close()

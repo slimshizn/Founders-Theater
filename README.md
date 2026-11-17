@@ -38,7 +38,7 @@
 - Sign in with an activation code or your username and password.
 - Household profiles, including PIN-protected ones, and profile management.
 - Settings for your profile and for this device, and switching between several Silo servers.
-- Optionally opens when Kodi starts, and asks before exiting so Back can't close it by accident.
+- Optionally opens when Kodi starts, and asks before exiting so Back can't close it by accident. The exit question can leave out Quit Kodi, for systems like OSMC where Kodi is the whole device.
 
 **Extras**
 - Silo rows, Watchlist and Favorites on Kodi's own home screen with the optional **Founders Theater Widgets** add-on.

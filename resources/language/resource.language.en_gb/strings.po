@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 msgid ""
 msgstr ""
-"Project-Id-Version: script.founderstheater 0.9.7\n"
+"Project-Id-Version: script.founderstheater 0.9.8\n"
 "Language: en_GB\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -439,4 +439,12 @@ msgstr ""
 
 msgctxt "#32118"
 msgid "Back on the Home tab asks before closing Founders Theater, with Exit, Quit Kodi and Cancel. Turn off to close it straight away."
+msgstr ""
+
+msgctxt "#32119"
+msgid "Hide Quit Kodi"
+msgstr ""
+
+msgctxt "#32120"
+msgid "Turn on if Kodi is the whole system, as on OSMC, LibreELEC or CoreELEC, where Quit Kodi only restarts Kodi. The exit question then offers Exit and Cancel."
 msgstr ""

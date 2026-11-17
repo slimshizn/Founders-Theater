@@ -503,6 +503,15 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(transport.calls[0][2]["User-Agent"], "FoundersTheater")
         self.assertEqual(transport.calls[1][2]["User-Agent"], "FoundersTheater/0.2.2")
 
+    def test_every_request_names_the_client_for_silo(self):
+        transport = Transport(response({}), response({}))
+        self.client(transport).me()
+        self.client(transport, user_agent="FoundersTheater/0.9.8").me()
+        self.assertEqual(transport.calls[0][2]["X-Silo-Client"], "Founders Theater")
+        self.assertNotIn("X-Silo-Client-Version", transport.calls[0][2])
+        self.assertEqual(transport.calls[1][2]["X-Silo-Client"], "Founders Theater")
+        self.assertEqual(transport.calls[1][2]["X-Silo-Client-Version"], "0.9.8")
+
 
 if __name__ == "__main__":
     unittest.main()

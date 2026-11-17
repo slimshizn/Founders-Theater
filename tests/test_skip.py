@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from resources.lib.silo import keymap
-from resources.lib.silo.player_extras import (MENU_REQUEST, PLAYING, PlaybackExtras, WatchStreak, chapters_for,
+from resources.lib.silo.player_extras import (audio_track_label, MENU_REQUEST, PLAYING, PlaybackExtras, WatchStreak, chapters_for,
                                              quality_options, route_label)
 from resources.lib.silo.skip import SkipTracker, segments, skip_target
 
@@ -20,6 +20,34 @@ VERSION = {
 }
 EPISODE = {"content_id": "episode-1", "type": "episode", "title": "Pilot", "series_id": "series-1",
            "series_title": "Example Show", "season_number": 1, "episode_number": 1, "versions": [VERSION]}
+
+
+class AudioTrackLabelTests(unittest.TestCase):
+    """Tracks titled with their codec still show their language (real titles from a Silo library)."""
+
+    def test_codec_titles_give_way_to_the_language(self):
+        cases = [({"language": "en", "title": "ATSC A/52B (AC-3, E-AC-3)", "codec": "eac3", "channels": 6},
+                  "English · EAC3 · 5.1"),
+                 ({"language": "en", "title": "AAC (Advanced Audio Coding)", "codec": "aac", "channels": 2},
+                  "English · AAC · Stereo"),
+                 ({"language": "eng", "title": "English [Dolby Digital Plus with Dolby Atmos 5.1]", "codec": "eac3",
+                   "channels": 6}, "English · EAC3 · 5.1"),
+                 ({"language": "ko", "title": "AAC (Advanced Audio Coding)", "codec": "aac", "channels": 2},
+                  "Korean · AAC · Stereo")]
+        for track, label in cases:
+            self.assertEqual(audio_track_label(track, 0), label)
+
+    def test_a_meaningful_title_stays_next_to_the_language(self):
+        self.assertEqual(audio_track_label({"language": "eng", "title": "Director's Commentary", "codec": "aac",
+                                            "channels": 2}, 0), "English · Director's Commentary · AAC · Stereo")
+        self.assertEqual(audio_track_label({"language": "zh", "title": "Mandarin [DDP.5.1]", "codec": "eac3",
+                                            "channels": 6}, 0), "Chinese · Mandarin · EAC3 · 5.1")
+
+    def test_missing_language_and_empty_tracks(self):
+        self.assertEqual(audio_track_label({"title": "MP3 (MPEG audio layer 3)", "codec": "mp3", "channels": 2}, 0),
+                         "Unknown · MP3 · Stereo")
+        self.assertEqual(audio_track_label({"language": "und", "codec": "flac", "channels": 8}, 1), "Unknown · FLAC · 7.1")
+        self.assertEqual(audio_track_label({}, 2), "Track 3")
 
 
 class SegmentTests(unittest.TestCase):
@@ -406,7 +434,7 @@ class ConvertedMenuTests(unittest.TestCase):
         self.assertTrue(context["converted"])
         self.assertEqual(context["audio_index"], 1)
         self.assertEqual([track["label"] for track in context["audio_tracks"]],
-                         ["ENG · TRUEHD · 7.1", "Commentary · AAC · Stereo"])
+                         ["English · TRUEHD · 7.1", "Commentary · AAC · Stereo"])
         self.assertEqual(context["qualities"], [{"value": "original", "label": "Original"},
                                                 {"value": "1080p-medium", "label": "1080p Medium"}])
         self.assertEqual(context["quality"], "1080p-medium")

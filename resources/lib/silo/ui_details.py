@@ -19,7 +19,7 @@ import xbmcgui
 
 from . import present, svc_boxsets, svc_personal, svc_shuffle
 from .api import ApiError
-from .present import is_unwatched
+from .present import is_unwatched, language_name
 from .media import (available_versions, default_version, format_time, is_multipart, resume_position,
                     subtitle_choices, version_label, version_name)
 from .player_extras import audio_track_label
@@ -70,15 +70,6 @@ _YOUTUBE_KEY = re.compile(r"[A-Za-z0-9_-]{6,32}")
 EXTRA_KINDS = {"trailer": "Trailer", "teaser": "Teaser", "featurette": "Featurette", "clip": "Clip",
                "behind_the_scenes": "Behind the Scenes", "deleted_scene": "Deleted Scene",
                "interview": "Interview", "short": "Short", "scene": "Scene", "bloopers": "Bloopers"}
-LANGUAGES = {"en": "English", "fr": "French", "de": "German", "es": "Spanish", "it": "Italian", "ja": "Japanese",
-             "ko": "Korean", "zh": "Chinese", "pt": "Portuguese", "ru": "Russian", "ar": "Arabic", "hi": "Hindi",
-             "nl": "Dutch", "sv": "Swedish", "da": "Danish", "no": "Norwegian", "fi": "Finnish", "pl": "Polish",
-             "tr": "Turkish", "cs": "Czech", "el": "Greek", "he": "Hebrew", "hu": "Hungarian", "th": "Thai"}
-LANGUAGE_CODES = {"eng": "en", "fre": "fr", "fra": "fr", "ger": "de", "deu": "de", "spa": "es", "ita": "it",
-                  "jpn": "ja", "kor": "ko", "chi": "zh", "zho": "zh", "por": "pt", "rus": "ru", "ara": "ar",
-                  "hin": "hi", "dut": "nl", "nld": "nl", "swe": "sv", "dan": "da", "nor": "no", "fin": "fi",
-                  "pol": "pl", "tur": "tr", "cze": "cs", "ces": "cs", "gre": "el", "ell": "el", "heb": "he",
-                  "hun": "hu", "tha": "th"}
 MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
           "November", "December")
 # Titles the profile can rate 1 to 5 stars from the More menu (svc_personal.set_rating).
@@ -116,14 +107,6 @@ def chip_width(text):
 
 
 # ------------------------------------------------------------- pure helpers
-
-
-def language_name(code):
-    code = _text(code).lower()
-    if not code or code == "und":
-        return ""
-    code = LANGUAGE_CODES.get(code, code)
-    return LANGUAGES.get(code, code.upper())
 
 
 def long_date(value):
