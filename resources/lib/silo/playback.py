@@ -23,6 +23,28 @@ RESUME_TIMEOUT, RESUME_TIMEOUT_CONVERTED = 10, 30
 OPENING_QUIET_SECONDS = 5.0
 
 
+class SidecarLoader:
+    """Downloads one sidecar subtitle on its own thread while Kodi opens the stream."""
+
+    def __init__(self, download):
+        self.path = None
+        self._finished = threading.Event()
+
+        def run():
+            try:
+                self.path = download()
+            finally:
+                self._finished.set()
+
+        threading.Thread(target=run, name="silo-subtitle", daemon=True).start()
+
+    def wait(self, timeout):
+        return self._finished.wait(timeout)
+
+    def done(self):
+        return self._finished.is_set()
+
+
 def player_near(player, target):
     """Whether Kodi already started at ``target`` (StartOffset), so no seek is needed."""
     try:
@@ -56,6 +78,9 @@ REPLAN_OPERATIONS = ("failure_recovery", "seek_reanchor", "track_change", "quali
 INTENT_OPERATIONS = ("track_change", "quality_change")
 MAX_RECOVERY_ATTEMPTS = 3
 SUBTITLE_LIMIT = 8 * 1024 * 1024
+# How long, after the first frame, a sidecar subtitle may still hold up the start
+# of playback; a slower one (Silo extracting an embedded track) loads mid-play.
+SIDECAR_GRACE_SECONDS = 0.5
 SUBTITLE_EXTENSIONS = ("srt", "vtt", "ass", "ssa")
 
 
@@ -196,7 +221,7 @@ def _bandwidth_cap(options):
 class PlaybackSession:
     """Synchronous session core, independent of Kodi and exercised offline."""
 
-    def __init__(self, client, mode="auto", version="0.9.8", options=None):
+    def __init__(self, client, mode="auto", version="0.9.9", options=None):
         self.client, self.mode, self.version = client, mode, version
         self.options = dict(options or {})
         # /api/v2 calls this installation_id, but it identifies the SERVER.
@@ -1080,18 +1105,20 @@ class PlaybackController:
 
         def mount(plan, switching):
             """Hand one plan's stream to Kodi; "started", "failed", "finished" or "aborted"."""
-            nonlocal opened, stage, guard, used_adaptive
+            nonlocal opened, stage, guard, used_adaptive, pending_sidecar
             converted = is_converted(plan)
             path = kodi_media_url(self.client.server_url, plan["stream"], relay=relay)
-            # Subtitle setup, including any credential refresh, happens before
-            # media opens. Sidecars are saved locally so Kodi never receives a
-            # URL carrying the sign-in or profile token. An HLS transport has no
-            # subtitle stream, so only original files select embedded tracks.
+            # Sidecars are saved locally so Kodi never receives a URL carrying the
+            # sign-in or profile token. They download while Kodi opens the stream:
+            # Silo may need seconds to extract an embedded track, and the Silo apps
+            # never hold the video for it. An HLS transport has no subtitle stream,
+            # so only original files select embedded tracks.
             subtitle = plan.get("subtitle") or {}
-            subtitle_path, embedded_index = None, None
+            sidecar, embedded_index = None, None
+            pending_sidecar = None  # A newer mount supersedes any download still running.
             if options.get("subtitle_mode", "server") != "off":
                 if subtitle.get("artifact"):
-                    subtitle_path = self._save_subtitle(subtitle["artifact"], log_event)
+                    sidecar = SidecarLoader(lambda: self._save_subtitle(subtitle["artifact"], log_event))
                 elif not converted:
                     embedded_index = embedded_subtitle_index(subtitle)
             used_adaptive = bool(converted and not native_only
@@ -1150,6 +1177,8 @@ class PlaybackController:
             if player.finished:
                 return "finished"
             log_event("av_started")
+            if not switching:
+                report_first_frame(plan)
             start = planned_start
             guard = ResumeGuard(start, timeout=RESUME_TIMEOUT_CONVERTED if converted else RESUME_TIMEOUT)
             stage = "resume_seek"
@@ -1167,9 +1196,14 @@ class PlaybackController:
                         or subtitle.get("mode") in (None, "off")):
                     # Off means off: Kodi's own subtitle language settings must not turn one on.
                     player.showSubtitles(False)
-                elif subtitle_path:
-                    player.setSubtitles(subtitle_path)
-                    self.loaded_subtitle = subtitle_path
+                elif sidecar is not None:
+                    if sidecar.wait(SIDECAR_GRACE_SECONDS):
+                        show_sidecar(sidecar)
+                    else:
+                        # Hidden until it arrives; the playback loop turns it on.
+                        player.showSubtitles(False)
+                        pending_sidecar = sidecar
+                        log_event("subtitle_loading")
                 elif embedded_index is not None:
                     streams = player.getAvailableSubtitleStreams()
                     if not player.finished and 0 <= embedded_index < len(streams):
@@ -1183,6 +1217,36 @@ class PlaybackController:
             return "started"
 
         native_only = False
+        pending_sidecar = None
+        start_requested_at = [None]
+
+        def show_sidecar(loader):
+            """Turn on a downloaded sidecar; a failed download plays on without one."""
+            if loader.path and not player.finished:
+                player.setSubtitles(loader.path)
+                self.loaded_subtitle = loader.path
+
+        def report_first_frame(plan):
+            """Tell Silo how long this start took, as the Silo apps do (route event first_frame)."""
+            began = start_requested_at[0]
+            if began is None or not session.start_body:
+                return
+            body = {"installation_id": session.installation_id, "event_id": str(uuid.uuid4()),
+                    "protocol_version": 3, "playback_attempt_id": session.start_body["playback_attempt_id"],
+                    "session_id": session.session_id, "plan_id": plan.get("plan_id"),
+                    "plan_attempt_id": session.plan_attempt_id, "plan_attempt_key": plan.get("plan_attempt_key"),
+                    "event": "first_frame",
+                    "diagnostics": {"first_frame_ms": str(int((time.monotonic() - began) * 1000))}}
+            body = {key: value for key, value in body.items() if value not in (None, "")}
+
+            def send():
+                try:
+                    self.client.request("POST", "/playback/route-events", body)
+                except Exception:  # A diagnostic must never surface; the title is already playing.
+                    log_event("first_frame_report_failed")
+
+            # Diagnostics never hold up playback.
+            threading.Thread(target=send, name="silo-first-frame", daemon=True).start()
 
         def open_plan(plan, switching=False):
             """Mount ``plan``; if Kodi cannot open it, fall back natively, then replan."""
@@ -1370,6 +1434,7 @@ class PlaybackController:
         try:
             version = "".join(char for char in self.addon.getAddonInfo("version") if char in "0123456789.")[:24]
             log_event("begin_v" + (version or "unknown"))
+            start_requested_at[0] = time.monotonic()
             plan = session.start(str(file_id) if file_id is not None else select_file(item), start_position)
             log_event("plan_ready", session.position)
             carried = str(options.get("carried_quality") or "auto")
@@ -1410,6 +1475,10 @@ class PlaybackController:
                 # after that notification has arrived.
                 if player.finished:
                     break
+                if pending_sidecar is not None and pending_sidecar.done():
+                    loader, pending_sidecar = pending_sidecar, None
+                    show_sidecar(loader)
+                    log_event("subtitle_loaded" if loader.path else "subtitle_unavailable_late")
                 serial, notice, fatal, error = reporter.status()
                 if serial != last_notice:
                     last_notice = serial

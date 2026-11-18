@@ -125,13 +125,26 @@ class FakeClient:
         self.capabilities = server_capabilities()
         self.subtitle_bytes = b"1\n00:00:01,000 --> 00:00:02,000\nHello\n"
         self.download_error = None
+        self.download_gate = None  # A threading.Event the download waits for (a slow extraction).
         self.replans = []
 
     def download(self, url, max_bytes):
         self.calls.append(("DOWNLOAD", url, None))
+        if self.download_gate is not None:
+            self.download_gate.wait(5)
         if self.download_error is not None:
             raise self.download_error
         return self.subtitle_bytes
+
+    def route_events(self, event, timeout=2.0):
+        """Route events of one kind; they are posted from a background thread."""
+        deadline = time.monotonic() + timeout
+        while True:
+            found = [call[2] for call in self.calls
+                     if call[1] == "/playback/route-events" and (call[2] or {}).get("event") == event]
+            if found or time.monotonic() >= deadline:
+                return found
+            time.sleep(0.01)
 
     def request(self, method, path, body):
         self.calls.append((method, path, deepcopy(body)))
@@ -144,6 +157,8 @@ class FakeClient:
             if isinstance(answer, Exception):
                 raise answer
             return deepcopy(answer)
+        if path == "/playback/route-events":
+            return {"event_id": body["event_id"]}
         if path.endswith("/progress"):
             if self.fail_progress_once:
                 self.fail_progress_once = False
@@ -975,6 +990,44 @@ class ControllerTests(KodiHarness):
         self.assertFalse(os.path.exists(old))
         self.assertTrue(os.path.exists(unrelated))
         self.assertEqual(len(state.subtitles), 1)
+
+    def test_a_slow_sidecar_never_holds_up_the_start(self):
+        """Silo can take seconds to extract an embedded track; the video starts first."""
+        client = FakeClient(self.subtitle_decision(
+            {"mode": "render", "artifact": {"url": "/api/v2/stream/s1/subtitles/0.ass", "format": "ass"}}))
+        client.download_gate = threading.Event()
+        timer = threading.Timer(0.2, client.download_gate.set)
+        timer.start()
+        try:
+            with patch("silo.playback.SIDECAR_GRACE_SECONDS", 0.01):
+                state = self.run_player(client, [(1, None)] * 600 + [(2, "stop")], start=0)
+        finally:
+            timer.cancel()
+            client.download_gate.set()
+        self.assertEqual(len(state.plays), 1)
+        self.assertEqual(state.visibility[0], False)  # Hidden while it downloads.
+        self.assertEqual(len(state.subtitles), 1)  # Turned on once it arrived.
+        self.assertTrue(any("subtitle_loading" in line for line in state.logs))
+        self.assertTrue(any("subtitle_loaded" in line for line in state.logs))
+
+    def test_a_quick_sidecar_is_on_from_the_first_frame(self):
+        client = FakeClient(self.subtitle_decision(
+            {"mode": "render", "artifact": {"url": "/api/v2/stream/s1/subtitles/0.srt"}}))
+        state = self.run_player(client, [(1, None), (2, "stop")], start=0)
+        self.assertEqual(len(state.subtitles), 1)
+        self.assertFalse(any("subtitle_loading" in line for line in state.logs))
+
+    def test_first_frame_is_reported_once_with_the_start_time(self):
+        client = FakeClient()
+        self.run_player(client, [(1, None), (2, "stop")], start=0)
+        events = client.route_events("first_frame")
+        self.assertEqual(len(events), 1)
+        event = events[0]
+        self.assertTrue(event["diagnostics"]["first_frame_ms"].isdigit())
+        self.assertEqual(event["protocol_version"], 3)
+        for key in ("installation_id", "event_id", "playback_attempt_id"):
+            self.assertTrue(event.get(key), key)
+        self.assertEqual(set(event["diagnostics"]), {"first_frame_ms"})
 
     def test_subtitle_download_failure_still_plays_without_subtitles(self):
         client = FakeClient(self.subtitle_decision(
