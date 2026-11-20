@@ -73,6 +73,7 @@ EXTRA_KINDS = {"trailer": "Trailer", "teaser": "Teaser", "featurette": "Featuret
 MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
           "November", "December")
 # Titles the profile can rate 1 to 5 stars from the More menu (svc_personal.set_rating).
+# Silo stores a rating as 1 to 10, two per star; the menu offers whole stars.
 RATED_KINDS = ("movie", "series")
 BOX_SET_UNAVAILABLE = ("This box set isn't available. Box sets may be turned off for this library, "
                        "or too few of its movies are here.")
@@ -82,9 +83,9 @@ def _text(value):
     return str(value).strip() if value not in (None, "") else ""
 
 
-def stars_label(stars):
-    """Plain text: Kodi's default skin font may not draw a star character."""
-    return "1 star" if stars == 1 else "{} stars".format(stars)
+def stars_label(score):
+    """A 1 to 10 rating as stars ("3.5 stars"). Plain text: Kodi's default skin font may not draw a star character."""
+    return "1 star" if score == 2 else "{:g} stars".format(score / 2)
 
 
 def split_title(title):
@@ -1019,17 +1020,18 @@ class DetailsWindow(xbmcgui.WindowXML):
     def rate(self):
         """Pick 5 down to 1 stars, or remove the rating; saved to the profile."""
         current = svc_personal.rating(self.item)
-        choices = list(range(5, 0, -1)) + ([None] if current else [])
-        labels = [stars_label(stars) if stars else "Remove rating" for stars in choices]
+        # A half-star rating made in another Silo app matches no choice here.
+        choices = list(range(10, 0, -2)) + ([None] if current else [])
+        labels = [stars_label(score) if score else "Remove rating" for score in choices]
         chosen = self.application.dialog.select("Rate " + (_text(self.item.get("title")) or "this title"), labels,
-                                                preselect=choices.index(current) if current else -1)
+                                                preselect=choices.index(current) if current in choices else -1)
         if not isinstance(chosen, int) or not 0 <= chosen < len(choices) or choices[chosen] == current:
             return
-        stars = choices[chosen]
-        svc_personal.set_rating(self.application.client, self.item["content_id"], stars)
-        self.item = dict(self.item, user_rating=stars)
+        score = choices[chosen]
+        svc_personal.set_rating(self.application.client, self.item["content_id"], score)
+        self.item = dict(self.item, user_rating=score)
         self.application.dialog.notification(
-            "Founders Theater", "Rated " + stars_label(stars) if stars else "Rating removed", time=2500, sound=False)
+            "Founders Theater", "Rated " + stars_label(score) if score else "Rating removed", time=2500, sound=False)
 
     def set_season_watched(self, season, on):
         svc_personal.set_watched(self.application.client, season["content_id"], on)

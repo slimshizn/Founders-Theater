@@ -20,18 +20,20 @@ class PersonalServiceTests(unittest.TestCase):
         svc_personal.set_watched(self.client, "episode:1", False)
         self.client.request.assert_called_with("DELETE", "/watched/episode%3A1")
 
-    def test_ratings_put_stars_or_delete(self):
-        svc_personal.set_rating(self.client, "movie:a b", 5)
-        self.client.request.assert_called_with("PUT", "/ratings/movie%3Aa%20b", body={"rating": 5})
+    def test_ratings_put_a_score_from_1_to_10_or_delete(self):
+        for score in (1, 5, 10):
+            svc_personal.set_rating(self.client, "movie:a b", score)
+            self.client.request.assert_called_with("PUT", "/ratings/movie%3Aa%20b", body={"rating": score})
         svc_personal.set_rating(self.client, "movie:a b", None)
         self.client.request.assert_called_with("DELETE", "/ratings/movie%3Aa%20b")
-        for bad in (0, 6, True, "4", 4.5):
+        for bad in (0, 11, True, "4", 4.5):
             with self.assertRaises(ValueError):
                 svc_personal.set_rating(self.client, "movie:1", bad)
 
-    def test_rating_reads_only_whole_stars_from_detail(self):
-        self.assertEqual(svc_personal.rating({"user_rating": 3}), 3)
-        for detail in ({}, None, {"user_rating": None}, {"user_rating": 0}, {"user_rating": 7},
+    def test_rating_reads_a_score_from_1_to_10_from_detail(self):
+        for score in (1, 7, 10):
+            self.assertEqual(svc_personal.rating({"user_rating": score}), score)
+        for detail in ({}, None, {"user_rating": None}, {"user_rating": 0}, {"user_rating": 11},
                        {"user_rating": True}, {"user_rating": "4"}):
             self.assertIsNone(svc_personal.rating(detail), detail)
 

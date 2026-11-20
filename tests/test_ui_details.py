@@ -665,14 +665,15 @@ class DetailsWindowTests(unittest.TestCase):
         heading, labels = self.app.dialog.select.call_args.args
         self.assertEqual(labels, ["5 stars", "4 stars", "3 stars", "2 stars", "1 star"])
         self.assertEqual(self.app.dialog.select.call_args.kwargs["preselect"], -1)
-        self.assertEqual(calls[-1], ("PUT", "/ratings/movie%3A1", {"rating": 4}))
-        self.assertEqual(window.item["user_rating"], 4)
+        # Silo stores a rating as 1 to 10, two per star.
+        self.assertEqual(calls[-1], ("PUT", "/ratings/movie%3A1", {"rating": 8}))
+        self.assertEqual(window.item["user_rating"], 8)
         self.choose_more(window, "nothing")
         self.assertIn("Rate (4 stars)", self.menu)
 
     def test_changing_or_removing_a_rating(self):
         calls = self.route({})
-        window = self.window(dict(movie_item(), user_rating=4))
+        window = self.window(dict(movie_item(), user_rating=8))
         window.onInit()
         self.app.dialog.select.return_value = 5  # Remove rating, offered once rated
         self.choose_more(window, "Rate (4 stars)")
@@ -686,12 +687,23 @@ class DetailsWindowTests(unittest.TestCase):
 
     def test_choosing_the_same_rating_or_cancelling_sends_nothing(self):
         calls = self.route({})
-        window = self.window(dict(movie_item(), user_rating=3))
+        window = self.window(dict(movie_item(), user_rating=6))
         window.onInit()
         for chosen in (2, -1):  # 3 stars again, then Back
             self.app.dialog.select.return_value = chosen
             self.choose_more(window, "Rate (3 stars)")
         self.assertFalse([call for call in calls if call[1].startswith("/ratings/")])
+
+    def test_a_half_star_rating_from_another_app_shows_and_can_be_changed(self):
+        calls = self.route({})
+        window = self.window(dict(movie_item(), user_rating=7))
+        window.onInit()
+        self.app.dialog.select.return_value = 0  # 5 stars
+        self.choose_more(window, "Rate (3.5 stars)")
+        self.assertEqual(self.app.dialog.select.call_args.kwargs["preselect"], -1)
+        self.assertEqual(calls[-1], ("PUT", "/ratings/movie%3A1", {"rating": 10}))
+        self.assertEqual(ui_details.stars_label(1), "0.5 stars")
+        self.assertEqual(ui_details.stars_label(2), "1 star")
 
     def test_series_can_be_rated_but_episodes_and_seasons_cannot(self):
         self.route({("GET", "/shuffles/capabilities"): {"state": "available", "scope_kinds": []}})
