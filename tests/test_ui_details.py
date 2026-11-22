@@ -934,7 +934,7 @@ class DetailsWindowTests(unittest.TestCase):
         self.assertIn("• AAC", text)
         self.assertNotIn("Subtitles", text)
 
-    def test_media_info_leads_with_the_file_name_or_says_the_server_keeps_it(self):
+    def test_media_info_leads_with_the_file_name_only_when_the_server_sends_it(self):
         version = {"file_id": "81234", "container": "mkv", "resolution": "1080p", "codec_video": "h264",
                    "codec_audio": "aac"}
         named = ui_details.media_info_text(dict(version, file_name="Example.2020.1080p.WEB-DL.x264-GROUP.mkv"))
@@ -944,7 +944,8 @@ class DetailsWindowTests(unittest.TestCase):
         hidden = ui_details.media_info_text(version)
         self.assertEqual(hidden.splitlines()[0], "MKV · 1080p")
         self.assertNotIn("81234", hidden)
-        self.assertEqual(hidden.splitlines()[-1], "File name: not shared by the server for this account.")
+        self.assertNotIn("File name", hidden)
+        self.assertEqual(hidden.splitlines()[-1], "• AAC")
 
     def test_file_label_without_a_file_name_shows_the_quality_alone(self):
         item = movie_item()

@@ -205,14 +205,11 @@ def _join(*parts):
     return " · ".join(_text(part) for part in parts if _text(part))
 
 
-FILE_NAME_HIDDEN = "File name: not shared by the server for this account."
-
-
 def media_info_text(version):
     """Container, video, audio and subtitle tracks of one file version.
 
     The file name leads when Silo sends it. Silo keeps it from accounts that may not curate
-    metadata; the text then ends with a line saying so, instead of a made-up name.
+    metadata; the text then starts with the container line, with no made-up name.
     """
     if not version:
         return "No media details are available."
@@ -256,8 +253,6 @@ def media_info_text(version):
                                       _codec(track.get("codec")), "Forced" if track.get("forced") else "",
                                       "SDH" if track.get("hearing_impaired") else "",
                                       "External" if track.get("external") else ""))
-    if not name:
-        lines += ["", FILE_NAME_HIDDEN]
     return "\n".join(line for line in lines if line is not None)
 
 
