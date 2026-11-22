@@ -26,6 +26,10 @@ from .ui import DetailsWindow, HomeWindow
 # play(subtitle_index=AUTO): use the remembered choice or the profile's preferences.
 AUTO = object()
 
+# What this app runs on, as Silo's sessions and device list name it (X-Silo-Device-Platform);
+# the device sign-in registers the same value.
+DEVICE_PLATFORM = "kodi"
+
 
 
 def error_location(exc):
@@ -103,6 +107,15 @@ class Application:
 
     def _profile_dir(self):
         return xbmcvfs.translatePath(self.addon.getAddonInfo("profile"))
+
+    @staticmethod
+    def device_name():
+        """This Kodi's own name (Settings > Services > General), for Silo's sessions and devices."""
+        try:
+            name = xbmc.getInfoLabel("System.FriendlyName")
+        except Exception:
+            name = ""
+        return (name.strip() if isinstance(name, str) else "") or "Kodi"
 
     def device_id(self):
         """A stable id for this Kodi installation, created on first use."""
@@ -267,7 +280,7 @@ class Application:
             action, content_id = self.deep_link
             self.deep_link = None
             if action == "play":
-                self.guard(lambda: self.play(self.client.item(content_id)))
+                self.guard(lambda: self.play(self.client.item(content_id), fresh=True))
             else:
                 self.guard(lambda: self.open_item({"content_id": content_id}))
             self.mark_active()
@@ -332,7 +345,8 @@ class Application:
         version = "".join(char for char in str(self.addon.getAddonInfo("version")) if char in "0123456789.")[:24]
         self.client = SiloClient(server_url, self.store,
                                  user_agent="FoundersTheater/" + version if version else "FoundersTheater",
-                                 device_id=self.device_id())
+                                 device_id=self.device_id(), device_name=self.device_name(),
+                                 device_platform=DEVICE_PLATFORM)
         self._server_settings = None
         if getattr(self, "_theme", None) is not None:
             self._theme.close()
@@ -686,6 +700,8 @@ class Application:
 
     def similar(self, item):
         """Related titles; the row is optional, so any failure just hides it."""
+        if item.get("type") in ("episode", "season"):
+            return []  # Silo relates whole titles: for an episode or a season it has none.
         try:
             return video_items(self.client.similar(item["content_id"]).get("items"))
         except (ApiError, OSError, ValueError, KeyError, AttributeError):
@@ -696,7 +712,7 @@ class Application:
         content_id = item.get("play_content_id")
         if not content_id:
             return None
-        return self.play(self.client.item(content_id))
+        return self.play(self.client.item(content_id), fresh=True)
 
     def open_item(self, card):
         content_id = card["content_id"]
@@ -773,7 +789,7 @@ class Application:
         self._after_playback_item = (self._playback_item_key(item, file_id), detail)
 
     def play(self, item, resume=None, file_id=None, subtitle_index=AUTO, start_at=None, auto_next=True,
-             audio_index=AUTO, quality=None, transition=None):
+             audio_index=AUTO, quality=None, transition=None, fresh=False):
         """Generic Play follows preferences; explicit Resume/Start keeps its intent.
 
         Return the chosen file so the detail screen can retain it after refresh.
@@ -783,7 +799,8 @@ class Application:
         ``audio_index`` is an audio ordinal picked on the details screen, or AUTO.
         ``quality`` is a quality the viewer picked during the previous episode
         and ``transition`` the Play next card still covering the screen
-        (see _play_up_next).
+        (see _play_up_next). ``fresh`` says ``item`` was read from Silo for
+        this very call, which saves reading a one-file title a second time.
         """
         if not self.is_playable(item):
             return None
@@ -809,8 +826,12 @@ class Application:
                 return None
         else:
             file_id = version["file_id"]
-        # Resolve effective markers and the latest progress for this exact file.
-        selected_item = self.refresh_item(item, file_id)
+        # Resolve effective markers and the latest progress for this exact file. A title
+        # read a moment ago that has only this file is already that answer.
+        if fresh and len(available_versions(item)) == 1:
+            selected_item = item
+        else:
+            selected_item = self.refresh_item(item, file_id)
         position = self.resume_seconds(selected_item)
         selected_version = default_version(selected_item, preferred_file_id=file_id)
         options = self._track_options(options, selected_item, selected_version, subtitle_index, audio_index)
@@ -875,12 +896,13 @@ class Application:
     def _play_up_next(self, card, previous_version, controller):
         """Play next: start the following episode as Silo's own apps do.
 
-        It starts from the beginning in the version that matches the one just
-        played (same resolution, then video codec, HDR kind and container;
-        media.matching_version), with the quality the viewer picked during the
-        episode. Without one matching version the usual file choice asks; a
-        quality this episode does not offer is asked for before it plays. The
-        episode is read fresh, so its files, markers and progress are current.
+        It starts from the beginning in the version closest to the one just
+        played (same resolution, then video codec, HDR kind, container,
+        edition, audio codec and nearest bitrate; media.matching_version), with
+        the quality the viewer picked during the episode. The file choice never
+        asks here, even when the setting is Ask; a quality this episode does
+        not offer is asked for before it plays. The episode is read fresh, so
+        its files, markers and progress are current.
         """
         transition = getattr(controller, "transition", None)
         if transition is not None and not callable(getattr(transition, "hide", None)):
@@ -893,8 +915,12 @@ class Application:
                 transition.show({"eyebrow": present.episode_code(card, ":"), "title": str(card.get("title") or "")})
             item = self.client.item(card["content_id"])
             file_id = matching_version(previous_version or {}, available_versions(item))
+            if file_id is None:
+                # Nothing to compare with: the default-file policy picks, without its prompt.
+                chosen = default_version(item, self.options()["file_selection"])
+                file_id = chosen["file_id"] if chosen else None
             quality = getattr(controller, "quality_choice", None)
-            return self.play(item, resume=False, file_id=file_id,
+            return self.play(item, resume=False, file_id=file_id, fresh=True,
                              quality=quality if isinstance(quality, str) else None, transition=transition)
         finally:
             if transition is not None:

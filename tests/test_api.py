@@ -55,6 +55,22 @@ class ClientTests(unittest.TestCase):
     def client(self, transport, store=None):
         return SiloClient(BASE, store if store is not None else credentials(), transport, clock=lambda: 100)
 
+    def test_device_name_and_platform_ride_with_the_device_id(self):
+        # Silo's sessions and device list take both from these headers.
+        transport = Transport(response({}), response({}), response({}))
+        SiloClient(BASE, credentials(), transport, clock=lambda: 100, device_id="kodi-abc",
+                   device_name="  Wohnzimmer – Fernseher\r\n", device_platform="kodi").me()
+        headers = transport.calls[0][2]
+        self.assertEqual(headers["X-Silo-Device-Name"], "Wohnzimmer Fernseher")  # what a header can carry
+        self.assertEqual(headers["X-Silo-Device-Platform"], "kodi")
+        # Only the id is known: nothing is made up for the rest.
+        SiloClient(BASE, credentials(), transport, clock=lambda: 100, device_id="kodi-abc").me()
+        self.assertEqual([name for name in transport.calls[1][2] if name.startswith("X-Silo-Device")],
+                         ["X-Silo-Device-Id"])
+        # A client without a device id (the widgets) declares no device at all.
+        SiloClient(BASE, credentials(), transport, clock=lambda: 100, device_name="Kodi", device_platform="kodi").me()
+        self.assertFalse([name for name in transport.calls[2][2] if name.startswith("X-Silo-Device")])
+
     def test_device_id_rides_every_request_and_settings_use_the_settings_api(self):
         transport = Transport(response({"items": [{"key": "ui.theme_music_enabled", "value": True},
                                                   {"key": "playback.buffering_quality_mode", "value": "ask"}]}),
@@ -424,6 +440,50 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(error.exception.status, 0)
         self.assertEqual(error.exception.code, "connection_failed")
         self.assertNotIn("secret.example", str(error.exception))
+
+    def test_responses_are_asked_for_compressed_and_unpacked(self):
+        import gzip
+
+        class Body(io.BytesIO):
+            code = 200
+            headers = {"Content-Encoding": "gzip"}
+
+        transport = UrllibTransport()
+        packed = gzip.compress(b'{"sections": [1, 2, 3]}')
+        with patch.object(transport.opener, "open", return_value=Body(packed)) as opened:
+            status, _headers, body = transport.request("GET", "https://silo.example/api/v2/home/sections",
+                                                       {"Accept": "application/json"}, None)
+        self.assertEqual((status, body), (200, {"sections": [1, 2, 3]}))
+        self.assertEqual(opened.call_args.args[0].get_header("Accept-encoding"), "gzip")
+        # A server that answers plainly is read as before.
+        Body.headers = {}
+        with patch.object(transport.opener, "open", return_value=Body(b'{"plain": true}')):
+            self.assertEqual(transport.request("GET", "https://silo.example/a", {}, None)[2], {"plain": True})
+        # A caller's own Accept-Encoding is left alone.
+        with patch.object(transport.opener, "open", return_value=Body(b"{}")) as opened:
+            transport.request("GET", "https://silo.example/a", {"accept-encoding": "identity"}, None)
+        self.assertEqual(opened.call_args.args[0].get_header("Accept-encoding"), "identity")
+
+    def test_a_damaged_or_oversized_compressed_body_is_refused(self):
+        import gzip
+
+        class Body(io.BytesIO):
+            code = 200
+            headers = {"content-encoding": "GZIP"}
+
+        transport = UrllibTransport()
+        with patch.object(transport.opener, "open", return_value=Body(b"not gzip at all")):
+            with self.assertRaises(ApiError) as error:
+                transport.request("GET", "https://silo.example/a", {}, None)
+        self.assertEqual(error.exception.code, "connection_failed")
+        # Small on the wire, too large once unpacked: the limit counts what it unpacks to.
+        bomb = gzip.compress(b"x" * 4096)
+        with patch.object(transport.opener, "open", return_value=Body(bomb)):
+            with self.assertRaises(ApiError) as error:
+                transport.download("https://silo.example/a", {}, 1024)
+        self.assertEqual(error.exception.code, "invalid_response")
+        with patch.object(transport.opener, "open", return_value=Body(gzip.compress(b"subtitle"))):
+            self.assertEqual(transport.download("https://silo.example/a", {}, 1024)[2], b"subtitle")
 
 
 class DownloadTransport(Transport):

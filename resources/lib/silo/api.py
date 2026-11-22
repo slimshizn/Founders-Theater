@@ -14,6 +14,7 @@ import re
 import threading
 import time
 import uuid
+import zlib
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -41,10 +42,35 @@ def normalize_server_url(value):
     return urlunsplit((parts.scheme.lower(), parts.netloc, parts.path.rstrip("/"), "", ""))
 
 
+def _header_text(value, limit):
+    """``value`` as a header can carry it: printable ASCII, at most ``limit`` characters."""
+    text = "".join(char for char in str(value or "") if " " <= char <= "~")
+    return " ".join(text.split())[:limit]
+
+
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         # Never forward passwords or bearer/profile tokens to a redirect target.
         return None
+
+
+def _compressed(headers):
+    """``headers`` asking for gzip: Silo's JSON shrinks five to ten times, as it does for its own apps."""
+    headers = dict(headers)
+    if not any(name.lower() == "accept-encoding" for name in headers):
+        headers["Accept-Encoding"] = "gzip"
+    return headers
+
+
+def _inflate(data, response_headers, limit):
+    """The body with gzip undone, cut off just past ``limit`` so the size check still catches it."""
+    encoding = next((value for name, value in response_headers.items() if name.lower() == "content-encoding"), "")
+    if not data or str(encoding).strip().lower() not in ("gzip", "x-gzip"):
+        return data
+    try:
+        return zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(data, limit + 1)
+    except zlib.error as exc:
+        raise ApiError(0, "The Silo server response was interrupted.", "connection_failed") from exc
 
 
 class UrllibTransport:
@@ -54,7 +80,7 @@ class UrllibTransport:
 
     def request(self, method, url, headers, body=None):
         payload = None if body is None else json.dumps(body).encode("utf-8")
-        req = Request(url, data=payload, headers=headers, method=method)
+        req = Request(url, data=payload, headers=_compressed(headers), method=method)
         try:
             response = self.opener.open(req, timeout=self.timeout)
         except HTTPError as exc:
@@ -68,6 +94,7 @@ class UrllibTransport:
                 response_headers = dict(response.headers)
         except (OSError, TimeoutError) as exc:
             raise ApiError(0, "The Silo server response was interrupted.", "connection_failed") from exc
+        data = _inflate(data, response_headers, 16 * 1024 * 1024)
         if len(data) > 16 * 1024 * 1024:
             raise ApiError(status, "The server response is too large.", "invalid_response")
         if not data:
@@ -82,7 +109,7 @@ class UrllibTransport:
 
     def download(self, url, headers, limit):
         """GET raw bytes, at most ``limit``; same no-redirect and error rules."""
-        req = Request(url, headers=headers, method="GET")
+        req = Request(url, headers=_compressed(headers), method="GET")
         try:
             response = self.opener.open(req, timeout=self.timeout)
         except HTTPError as exc:
@@ -96,6 +123,7 @@ class UrllibTransport:
                 response_headers = dict(response.headers)
         except (OSError, TimeoutError) as exc:
             raise ApiError(0, "The Silo server response was interrupted.", "connection_failed") from exc
+        data = _inflate(data, response_headers, limit)
         if len(data) > limit:
             raise ApiError(status, "The server response is too large.", "invalid_response")
         return status, response_headers, data
@@ -106,11 +134,15 @@ class SiloClient:
                  "profile_id", "profile_token", "profile_token_expires_at",
                  "temporary_session", "bound_profile_id", "session_expires_at", "auth_session_id")
 
-    def __init__(self, server_url, store, transport=None, clock=None, user_agent="FoundersTheater", device_id=None):
+    def __init__(self, server_url, store, transport=None, clock=None, user_agent="FoundersTheater", device_id=None,
+                 device_name=None, device_platform=None):
         self.server_url = normalize_server_url(server_url)
         # Stable id of this Kodi installation (X-Silo-Device-Id): device-scoped
         # settings, playback preferences and learned connection limits.
         self.device_id = device_id
+        # What Silo's sessions and device list call this device (X-Silo-Device-Name and
+        # X-Silo-Device-Platform), as the Silo apps declare theirs.
+        self.device_name, self.device_platform = _header_text(device_name, 64), _header_text(device_platform, 40)
         self.store = store
         self.transport = transport or UrllibTransport()
         self._clock = clock or time.time
@@ -208,6 +240,10 @@ class SiloClient:
             headers["X-Silo-Client-Version"] = version
         if getattr(self, "device_id", None):
             headers["X-Silo-Device-Id"] = self.device_id
+            for name, value in (("X-Silo-Device-Name", getattr(self, "device_name", "")),
+                                ("X-Silo-Device-Platform", getattr(self, "device_platform", ""))):
+                if value:
+                    headers[name] = value
         if authenticated:
             token = self.current_token()
             if not token:

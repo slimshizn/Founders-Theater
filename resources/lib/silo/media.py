@@ -6,6 +6,7 @@ This module deliberately has no Kodi dependency.
 """
 
 import math
+import re
 
 
 def available_versions(item):
@@ -38,14 +39,25 @@ def default_version(item, mode="ask", preferred_file_id=None):
     return versions[0]
 
 
+def _first_video_track(version):
+    tracks = [track for track in (version or {}).get("video_tracks") or [] if isinstance(track, dict)]
+    return tracks[0] if tracks else {}
+
+
 def _resolution_class(version):
-    value = str((version or {}).get("resolution") or "").strip().lower()
+    value = (version or {}).get("resolution") or _first_video_track(version).get("resolution")
+    value = str(value or "").strip().lower()
     return {"4k": "2160p", "uhd": "2160p", "fhd": "1080p", "hd": "720p", "sd": "480p"}.get(value, value)
 
 
+def _height(version):
+    """Picture lines of a version's resolution class ("1080p" is 1080), or 0 when unknown."""
+    numbers = re.findall(r"\d{3,4}", _resolution_class(version))
+    return int(numbers[-1]) if numbers else 0
+
+
 def _dynamic_range(version):
-    tracks = [track for track in (version or {}).get("video_tracks") or [] if isinstance(track, dict)]
-    kind = str((tracks[0].get("video_range_type") if tracks else "") or "").upper()
+    kind = str(_first_video_track(version).get("video_range_type") or "").upper()
     if "DOVI" in kind or "DOLBY" in kind:
         return "dv"
     if "HDR" in kind or "HLG" in kind or (version or {}).get("hdr") is True:
@@ -53,30 +65,61 @@ def _dynamic_range(version):
     return "sdr"
 
 
+def _kbps(version):
+    """A version's bitrate in kbps, worked out from size and length when Silo sends none."""
+    rate = _positive_number(version.get("bitrate"))
+    if rate:
+        return rate
+    size, seconds = _positive_number(version.get("file_size")), _positive_number(version.get("duration"))
+    return size * 8 / seconds / 1000 if size and seconds else 0.0
+
+
 def matching_version(previous, versions):
     """The file_id of the version that continues ``previous`` on another episode, or None.
 
-    Silo's Android TV app hands the next episode the same choice: the version
-    with the same resolution class, preferring the same video codec, then the
-    same HDR or Dolby Vision kind, then the same container. Only one best
-    candidate counts; a tie or no version at that resolution returns None so
-    the usual file choice decides.
+    Like Silo's Android TV app, the next episode keeps the resolution class,
+    preferring the same video codec, then the same HDR or Dolby Vision kind,
+    then the same container. That app stops at a tie; here the choice goes on
+    so Play next never has to ask: the same edition, the same audio codec, the
+    bitrate closest to the one just played (two releases at one resolution
+    differ mostly there), the first part of a multi-part file, then catalog
+    order. With no version at that resolution the nearest one is used, the
+    lower of two equally near. None when there are no versions or nothing
+    tells how ``previous`` compares with them.
     """
+    previous = previous if isinstance(previous, dict) else {}
+    versions = [version for version in versions or [] if isinstance(version, dict) and version.get("file_id")]
     resolution = _resolution_class(previous)
-    if not resolution:
+    if not resolution or not versions:
         return None
     candidates = [version for version in versions if _resolution_class(version) == resolution]
-
-    def rank(version):
-        return (str(version.get("codec_video") or "").lower() == str(previous.get("codec_video") or "").lower(),
-                _dynamic_range(version) == _dynamic_range(previous),
-                str(version.get("container") or "").lower() == str(previous.get("container") or "").lower())
-
     if not candidates:
-        return None
-    best = max(rank(version) for version in candidates)
-    winners = [version for version in candidates if rank(version) == best]
-    return winners[0]["file_id"] if len(winners) == 1 else None
+        height = _height(previous)
+        sized = [version for version in versions if _height(version)]
+        if not height or not sized:
+            return None
+        nearest = min((abs(_height(version) - height), _height(version)) for version in sized)
+        candidates = [version for version in sized if (abs(_height(version) - height), _height(version)) == nearest]
+    played = _kbps(previous)
+
+    def token(version, key, track_key=None):
+        value = version.get(key) or (_first_video_track(version).get(track_key) if track_key else None)
+        return str(value or "").strip().lower()
+
+    def distance(entry):
+        index, version = entry
+        rate = _kbps(version)
+        part = version.get("presentation_part_index")
+        return (token(version, "codec_video", "codec") != token(previous, "codec_video", "codec"),
+                _dynamic_range(version) != _dynamic_range(previous),
+                token(version, "container") != token(previous, "container"),
+                token(version, "edition_key") != token(previous, "edition_key"),
+                token(version, "codec_audio") != token(previous, "codec_audio"),
+                abs(math.log(rate / played)) if rate and played else math.inf,
+                part if isinstance(part, int) and not isinstance(part, bool) and part > 0 else 0,
+                index)
+
+    return min(enumerate(candidates), key=distance)[1]["file_id"]
 
 
 def version_name(version):

@@ -29,11 +29,48 @@ class MatchingVersionTests(unittest.TestCase):
                      version("y", "1080p", codec="h264", container="mkv")]
         self.assertEqual(matching_version(played, following), "y")
 
-    def test_no_single_best_or_no_same_resolution_asks_the_usual_way(self):
+    def test_two_releases_at_one_resolution_never_leave_the_choice_open(self):
+        # Silo's library: two 1080p HEVC MKV files per episode, apart only in bitrate and audio.
+        played = dict(version("a", "1080p"), bitrate=4200, codec_audio="eac3")
+        web = dict(version("web", "1080p"), bitrate=4400, codec_audio="eac3")
+        remux = dict(version("remux", "1080p"), bitrate=31000, codec_audio="truehd")
+        self.assertEqual(matching_version(played, [remux, web]), "web")
+        self.assertEqual(matching_version(dict(played, bitrate=29000, codec_audio="truehd"), [web, remux]), "remux")
+        # The audio codec counts before the bitrate; the edition before both.
+        self.assertEqual(matching_version(dict(played, bitrate=30000), [remux, web]), "web")
+        extended = dict(remux, file_id="extended", edition_key="extended")
+        self.assertEqual(matching_version(dict(played, edition_key="extended"), [web, extended]), "extended")
+
+    def test_bitrate_is_worked_out_from_size_and_length_when_missing(self):
+        played = dict(version("a", "1080p"), bitrate=8000)
+        small = dict(version("small", "1080p"), file_size=600 * 1000 * 1000, duration=2400)   # 2,000 kbps
+        large = dict(version("large", "1080p"), file_size=2700 * 1000 * 1000, duration=2400)  # 9,000 kbps
+        self.assertEqual(matching_version(played, [small, large]), "large")
+
+    def test_identical_files_take_the_first_part_then_catalog_order(self):
         played = version("a", "1080p")
-        self.assertIsNone(matching_version(played, [version("x", "1080p"), version("y", "1080p")]))
-        self.assertIsNone(matching_version(played, [version("x", "720p"), version("y", "2160p")]))
+        self.assertEqual(matching_version(played, [version("x", "1080p"), version("y", "1080p")]), "x")
+        parts = [dict(version("second", "1080p"), presentation_part_index=2, presentation_part_total=2),
+                 dict(version("first", "1080p"), presentation_part_index=1, presentation_part_total=2)]
+        self.assertEqual(matching_version(played, parts), "first")
+
+    def test_without_the_same_resolution_the_nearest_one_plays(self):
+        played = version("a", "1080p")
+        self.assertEqual(matching_version(played, [version("x", "480p"), version("y", "720p")]), "y")
+        self.assertEqual(matching_version(version("a", "2160p"), [version("x", "720p"), version("y", "1080p")]), "y")
+        # 720p and 1440p are equally far from 1080p: the lower one is the safer pick.
+        self.assertEqual(matching_version(played, [version("x", "1440p"), version("y", "720p")]), "y")
+
+    def test_nothing_to_compare_leaves_the_default_policy_to_decide(self):
         self.assertIsNone(matching_version({}, [version("x", "1080p")]))
+        self.assertIsNone(matching_version(None, [version("x", "1080p")]))
+        self.assertIsNone(matching_version(version("a", "1080p"), []))
+        self.assertIsNone(matching_version(version("a", "1080p"), [version("x", "")]))
+
+    def test_resolution_and_codec_fall_back_to_the_video_track(self):
+        played = {"file_id": "a", "video_tracks": [{"resolution": "2160p", "codec": "hevc"}]}
+        following = [version("x", "1080p"), version("avc", "2160p", codec="h264"), version("hevc", "2160p")]
+        self.assertEqual(matching_version(played, following), "hevc")
 
     def test_resolution_aliases_and_hdr_flag(self):
         played = {"file_id": "a", "resolution": "4K", "hdr": True}

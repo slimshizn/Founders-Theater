@@ -1029,6 +1029,22 @@ class ControllerTests(KodiHarness):
             self.assertTrue(event.get(key), key)
         self.assertEqual(set(event["diagnostics"]), {"first_frame_ms"})
 
+    def test_the_plan_summary_names_its_session_and_plan(self):
+        # Without these ids Silo stores the summary but cannot tie it to the session.
+        decision = playable_decision()
+        decision["playback_plan"].update(plan_id="plan:direct-0001", plan_attempt_key="v3:direct0001")
+        client = FakeClient(decision)
+        client.capabilities["features"].append("playback_plan_summary_v1")
+        self.run_player(client, [(1, None), (2, "stop")], start=0)
+        events = client.route_events("plan_summary")
+        self.assertEqual(len(events), 1)
+        event = events[0]
+        self.assertEqual(event["session_id"], "session/opaque id")
+        self.assertEqual(event["plan_id"], "plan:direct-0001")
+        self.assertEqual(event["plan_attempt_key"], "v3:direct0001")
+        self.assertTrue(event["plan_attempt_id"])
+        self.assertIn("played_ms", event["diagnostics"])
+
     def test_subtitle_download_failure_still_plays_without_subtitles(self):
         client = FakeClient(self.subtitle_decision(
             {"mode": "render", "artifact": {"url": "/api/v2/stream/s1/subtitles/2.srt"}}))

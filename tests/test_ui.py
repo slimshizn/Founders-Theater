@@ -431,6 +431,21 @@ class ApplicationFlowTests(unittest.TestCase):
         self.app.client.similar.side_effect = ApiError(503, "Recommendations are off")
         self.assertEqual(self.app.similar({"content_id": "m:1"}), [])
 
+    def test_similar_is_not_asked_for_an_episode_or_a_season(self):
+        # Silo relates whole titles; these requests always came back empty.
+        self.assertEqual(self.app.similar({"content_id": "e:1", "type": "episode"}), [])
+        self.assertEqual(self.app.similar({"content_id": "s:1", "type": "season"}), [])
+        self.app.client.similar.assert_not_called()
+
+    def test_device_name_is_this_kodis_own_name(self):
+        with patch.object(application_module.xbmc, "getInfoLabel", return_value="  Living room  ", create=True):
+            self.assertEqual(Application.device_name(), "Living room")
+        for missing in ("", None):
+            with patch.object(application_module.xbmc, "getInfoLabel", return_value=missing, create=True):
+                self.assertEqual(Application.device_name(), "Kodi")
+        with patch.object(application_module.xbmc, "getInfoLabel", side_effect=RuntimeError, create=True):
+            self.assertEqual(Application.device_name(), "Kodi")
+
     def test_play_next_plays_the_series_next_up_episode(self):
         episode = movie_item()
         episode.update(content_id="episode:2", type="episode")
@@ -524,21 +539,62 @@ class ApplicationFlowTests(unittest.TestCase):
             self.app.play(episode, resume=False)
         self.assertEqual(controller.return_value.play.call_count, 1)
 
-    def test_play_next_without_a_matching_version_uses_the_usual_choice(self):
-        first = dict(movie_item(multiple=True), content_id="episode:1", type="episode")
-        same = {"resolution": "720p"}
-        second = dict(first, content_id="episode:2",
-                      versions=[dict(same, file_id="one"), dict(same, file_id="two")])
+    def _play_then_next(self, first, second):
+        """Play ``first`` to its end with Play next on; the arguments the next episode started with."""
         self.app.client.item.side_effect = lambda content_id, **params: second if content_id == "episode:2" else first
-        self.app.choose_file = MagicMock(return_value="two")
+        self.app.choose_file = MagicMock(return_value=None)
         actions = iter([{"stop": "next", "item": {"content_id": "episode:2"}}, None])
         with patch.object(application_module, "PlaybackController") as controller:
             type(controller.return_value).next_action = property(lambda self: next(actions))
             controller.return_value.quality_choice = None
-            self.app.play(first, resume=False, file_id="file-a")
-        self.app.choose_file.assert_called_once()
-        self.assertEqual(controller.return_value.play.call_args_list[1].kwargs["file_id"], "two")
-        self.assertNotIn("carried_quality", controller.return_value.play.call_args_list[1].kwargs["options"])
+            self.app.play(first, resume=False, file_id=first["versions"][0]["file_id"])
+        self.app.choose_file.assert_not_called()  # Play next never stops on the file choice.
+        return controller.return_value.play.call_args_list[1].kwargs
+
+    def test_play_next_picks_between_two_alike_versions_without_asking(self):
+        first = dict(movie_item(multiple=True), content_id="episode:1", type="episode")
+        first["versions"][0]["bitrate"] = 17000
+        alike = {"resolution": "2160p", "hdr": True}
+        second = dict(first, content_id="episode:2",
+                      versions=[dict(alike, file_id="remux", bitrate=60000), dict(alike, file_id="web", bitrate=18000)])
+        started = self._play_then_next(first, second)
+        self.assertEqual(started["file_id"], "web")  # the release closest to the one just played
+        self.assertNotIn("carried_quality", started["options"])
+
+    def test_play_next_without_the_same_resolution_takes_the_nearest(self):
+        first = dict(movie_item(), content_id="episode:1", type="episode")  # 2160p
+        second = dict(first, content_id="episode:2", versions=[{"file_id": "sd", "resolution": "480p"},
+                                                               {"file_id": "hd", "resolution": "1080p"}])
+        self.assertEqual(self._play_then_next(first, second)["file_id"], "hd")
+
+    def test_play_next_with_nothing_to_compare_takes_the_default_file(self):
+        first = {"content_id": "episode:1", "type": "episode", "title": "One", "versions": [{"file_id": "only"}],
+                 "user_data": {}}
+        second = {"content_id": "episode:2", "type": "episode", "title": "Two", "user_data": {"last_file_id": "two"},
+                  "versions": [{"file_id": "one"}, {"file_id": "two"}]}
+        self.assertEqual(self._play_then_next(first, second)["file_id"], "two")  # the one played last time
+        second["user_data"] = {}
+        self.assertEqual(self._play_then_next(first, second)["file_id"], "one")
+
+    def test_a_one_file_title_read_for_this_play_is_not_read_twice(self):
+        episode = dict(movie_item(), content_id="episode:2", type="episode")
+        self.app.client.item.return_value = episode
+        with patch.object(application_module, "PlaybackController"):
+            self.app.play_next({"content_id": "series:1", "play_content_id": "episode:2"})
+        self.app.client.item.assert_called_once_with("episode:2")
+        # A title already on screen may be stale, so it is read again for the latest progress.
+        self.app.client.item.reset_mock()
+        with patch.object(application_module, "PlaybackController"):
+            self.app.play(episode)
+        self.app.client.item.assert_called_once_with("episode:2", file_id="file-a")
+        # With two files the chosen one is read again: markers and progress belong to a file.
+        both = dict(movie_item(multiple=True), content_id="episode:3", type="episode")
+        self.app.client.item.reset_mock()
+        self.app.client.item.return_value = both
+        self.app.choose_file = MagicMock(return_value="file-b")
+        with patch.object(application_module, "PlaybackController"):
+            self.app.play_next({"content_id": "series:1", "play_content_id": "episode:3"})
+        self.assertEqual([call.kwargs for call in self.app.client.item.call_args_list], [{}, {"file_id": "file-b"}])
 
     def test_update_profile_merges_server_answer(self):
         self.app.profile = {"id": "p", "name": "Example", "auto_skip_intro": False}

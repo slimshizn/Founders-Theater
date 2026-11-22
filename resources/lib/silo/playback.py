@@ -1278,7 +1278,9 @@ class PlaybackController:
         def post_plan_summary(summary):
             if bq.PLAN_SUMMARY_FEATURE not in session.server_features or not session.start_body:
                 return
-            ids = adoptions.get(summary.plan_id) or {}
+            # Keyed by adoption, not by the server's plan_id, which can repeat. Without these
+            # ids Silo cannot tie the summary to its session.
+            ids = adoptions.get(summary.adoption_id) or {}
             body = {"installation_id": session.installation_id, "event_id": str(uuid.uuid4()),
                     "protocol_version": 3, "playback_attempt_id": session.start_body["playback_attempt_id"],
                     "event": "plan_summary", "diagnostics": summary.diagnostics()}
