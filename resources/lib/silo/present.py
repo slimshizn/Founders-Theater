@@ -10,6 +10,8 @@ from urllib.parse import urlsplit, urlunsplit
 
 VIDEO_TYPES = frozenset({"movie", "series", "season", "episode"})
 WIDE_SECTION_TYPES = frozenset({"continue_watching", "next_up"})
+# The "type" of a card that is a collection rather than a title (a home row of collections).
+COLLECTION = "collection"
 
 
 def _number(value):
@@ -217,9 +219,19 @@ def hero_meta(item):
     return " · ".join(part for part in parts if part)
 
 
+def count_text(count):
+    """``12 titles`` for a collection's size; "" when the count is unknown."""
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        return ""
+    return "{:,} title{}".format(count, "" if count == 1 else "s")
+
+
 def hero(item, image, show_plot=True):
     """Home hero fields; ``image(item, kind)`` resolves artwork URLs."""
     synopsis = _text(item.get("overview") or item.get("description")) if show_plot else ""
+    if item.get("type") == COLLECTION:
+        return {"backdrop": image(item, "backdrop"), "logo": "", "title": _text(item.get("title")) or "Collection",
+                "badges": [], "meta": count_text(item.get("count")), "synopsis": synopsis}
     return {
         "backdrop": image(item, "backdrop"),
         "logo": image(item, "logo"),

@@ -236,6 +236,69 @@ def _swallow(callback):
         return None
 
 
+def collection_card(number, **extra):
+    card = {"id": "k{}".format(number), "type": "collection", "kind": "library", "library_id": "2",
+            "title": "Example Collection {}".format(number), "overview": "", "count": 10 + number,
+            "poster_url": "https://example.invalid/k{}.jpg".format(number),
+            "backdrop_url": "https://example.invalid/k{}-wide.jpg".format(number)}
+    card.update(extra)
+    return card
+
+
+class CollectionRowTests(unittest.TestCase):
+    """A home row of collections (Silo's collection_posters section)."""
+
+    def window(self):
+        row = {"id": "collections", "title": "Collections", "section_type": "collection_posters",
+               "items": [collection_card(1), collection_card(2, kind="personal", library_id=None)]}
+        application = make_application([section("Recently Added"), row])
+        application.image.side_effect = lambda item, kind: item.get(kind + "_url", "")
+        return open_window(application)
+
+    def test_the_row_is_filled_with_collection_cards(self):
+        with patch.object(ui_home, "collection_list_item") as collection_item, \
+                patch.object(ui_home, "card_list_item") as card_item:
+            window = self.window()
+        self.assertEqual([entry["title"] for entry in window.sections], ["Recently Added", "Collections"])
+        poster = ui_home.slot_ids(1)[4]
+        self.assertEqual(len(window.getControl(poster).addItems.call_args.args[0]), 2)
+        self.assertEqual([call.args[0]["id"] for call in collection_item.call_args_list], ["k1", "k2"])
+        self.assertEqual(card_item.call_count, 3)  # the row of titles only
+        window.getControl(ui_home.slot_ids(1)[1]).setLabel.assert_called_with("Collections")
+
+    def test_the_hero_shows_the_focused_collection(self):
+        window = self.window()
+        poster = ui_home.slot_ids(1)[4]
+        window.focus = poster
+        window.update_hero()
+        self.assertEqual(window.properties["silo.hero.title"], "Example Collection 1")
+        self.assertEqual(window.properties["silo.hero.meta"], "11 titles")
+        self.assertEqual(window.properties["silo.hero.backdrop"], "https://example.invalid/k1-wide.jpg")
+        self.assertEqual(window.properties["silo.hero.logo"], "")
+        self.assertEqual(window.properties["silo.hero.badge1"], "")
+
+    def test_a_collection_card_opens_the_collection_and_has_no_menu(self):
+        window = self.window()
+        poster = ui_home.slot_ids(1)[4]
+        window.getControl(poster).getSelectedPosition.return_value = 1
+        window.onClick(poster)
+        window.application.open_screen.assert_called_once_with("collection", collection=window.sections[1]["items"][1])
+        window.application.open_item.assert_not_called()
+        self.assertEqual(window.focus, poster)
+        window.card_menu(poster)
+        window.application.dialog.contextmenu.assert_not_called()
+
+    def test_coming_back_from_a_collection_keeps_its_card(self):
+        window = self.window()
+        poster = ui_home.slot_ids(1)[4]
+        window.getControl(poster).getSelectedPosition.return_value = 1
+        card = window.card_at(poster)
+        self.assertEqual(card, ("collections", "k2", 1, 1))
+        self.assertTrue(window.refresh_home(card))
+        window.getControl(poster).selectItem.assert_called_with(1)
+        self.assertEqual(window.properties["silo.hero.title"], "Example Collection 2")
+
+
 class TopBarTests(unittest.TestCase):
     def test_tabs_without_libraries_are_hidden_and_cluster_recentred(self):
         window = open_window(make_application(libraries={"movie": [{"id": 3, "name": "Films"}], "series": []}))
@@ -707,7 +770,8 @@ class TopBarPanelTests(unittest.TestCase):
         window.update_flyout()
         window.getControl(ui_home.FLYOUT_LIST).getSelectedPosition.return_value = 1
         window.onClick(ui_home.FLYOUT_LIST)
-        window.application.open_screen.assert_called_with("collections", library=None)
+        # All movies: the collections of every movie library, not only the profile's own.
+        window.application.open_screen.assert_called_with("collections", libraries=self.libraries(2)["movie"])
         window.onFocus(211)
         window.getControl(ui_home.LIB_LIST).getSelectedPosition.return_value = 1
         window.onClick(ui_home.LIB_LIST)  # opens that library's sections; Browse commits it

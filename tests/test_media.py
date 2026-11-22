@@ -99,7 +99,13 @@ class CatalogPresentationTests(unittest.TestCase):
 
     def test_filename_fallback_uses_basename_and_never_exposes_full_path(self):
         self.assertEqual(version_name({"file_id": "x", "file_path": "C:\\private\\Example.mkv"}), "Example.mkv")
-        self.assertEqual(version_name({"file_id": "opaque:id"}), "File opaque:id")
+
+    def test_a_file_whose_name_silo_keeps_back_gets_no_made_up_name(self):
+        # Silo sends file names only to the acting admin and to accounts that may curate metadata.
+        self.assertEqual(version_name({"file_id": "81234"}), "")
+        self.assertEqual(version_label({"file_id": "81234"}), "Media file")
+        self.assertEqual(version_label({"file_id": "81234", "resolution": "1080p", "container": "mkv"}),
+                         "1080p · MKV")
 
     def test_completed_title_does_not_offer_stale_resume(self):
         item = {"user_data": {"played": True, "position_seconds": 300}}

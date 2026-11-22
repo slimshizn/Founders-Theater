@@ -2,6 +2,7 @@
 
 Routes are Silo /api/v2: GET /recommendations/discover, GET /calendar,
 GET /collections, GET /library/{id}/collections, GET /library/{id}/collections/{cid}/items,
+the ``collections`` of a GET /home/sections row of collections,
 GET /library/{id}/sections (+ /sections/{sid}/items), GET /catalog/people/{id},
 GET /catalog (source=person | user_collection) and POST /history/remove.
 Every reader tolerates missing fields and wrong types and returns plain dicts.
@@ -173,6 +174,71 @@ def library_collections(client, library_id):
     ungrouped = [card for card in ungrouped if card["id"] not in seen]
     if ungrouped:
         groups.append({"title": "More collections" if groups else "Collections", "collections": ungrouped})
+    return groups
+
+
+def section_collections(section):
+    """The cards of a row of collections (section_type collection_posters), in the row's order.
+
+    Such a section answers ``collections`` instead of ``items``. Each card is a
+    collection_card with "type": present.COLLECTION, so a row can tell it from a title.
+    A server collection that names no library cannot be opened and is left out.
+    """
+    cards = []
+    for entry in _list(_dict(section).get("collections")):
+        entry = _dict(entry)
+        card = collection_card(entry, "personal" if entry.get("source") == "user" else "library")
+        if card and (card["kind"] == "personal" or card["library_id"]):
+            cards.append(dict(card, type=present.COLLECTION))
+    return cards
+
+
+def libraries_collections(client, libraries):
+    """The Collections tabs of several libraries as one list of groups (All movies, All series).
+
+    One library with collections keeps its own group titles. With more, each group is named
+    after its library: "Films", or "Films · Franchises" when that library has several groups.
+    A personal collection that more than one library shows appears once, under the first.
+    A library that fails is skipped; when every library fails the last error is raised.
+    """
+    tabs, answered, error = [], False, None
+    for library in _list(libraries):
+        library = _dict(library)
+        if library.get("id") in (None, ""):
+            continue
+        try:
+            groups = library_collections(client, library["id"])
+        except Exception as exc:  # One library's failure must not hide the others' collections.
+            error = exc
+            continue
+        answered = True
+        if groups:
+            tabs.append((_text(library.get("name")) or "Library", groups))
+    if error is not None and not answered:
+        raise error
+    result, seen = [], set()
+    for name, groups in tabs:
+        for group in groups:
+            cards = [card for card in group["collections"]
+                     if card["kind"] != "personal" or card["id"] not in seen]
+            seen.update(card["id"] for card in cards if card["kind"] == "personal")
+            if not cards:
+                continue
+            title = group["title"]
+            if len(tabs) > 1:
+                title = name if len(groups) == 1 else "{} · {}".format(name, title)
+            result.append({"title": title, "collections": cards})
+    return result
+
+
+def all_collections(client, libraries):
+    """Collections for every library of one kind: their tabs, then the profile's own collections
+    that none of them already shows."""
+    groups = libraries_collections(client, libraries)
+    shown = {card["id"] for group in groups for card in group["collections"] if card["kind"] == "personal"}
+    own = [card for group in collections(client) for card in group["collections"] if card["id"] not in shown]
+    if own:
+        groups = groups + [{"title": "My collections" if groups else "Collections", "collections": own}]
     return groups
 
 

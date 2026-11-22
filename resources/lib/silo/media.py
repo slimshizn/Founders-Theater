@@ -80,10 +80,15 @@ def matching_version(previous, versions):
 
 
 def version_name(version):
+    """The file's name, or "" when Silo keeps it back.
+
+    Silo sends file_name and file_path only to the acting admin and to accounts that may
+    curate metadata; everyone else gets the technical details without them.
+    """
     filename = version.get("file_name") or version.get("file_path")
     if filename:
         return str(filename).replace("\\", "/").rsplit("/", 1)[-1]
-    return "File {}".format(version["file_id"])
+    return ""
 
 
 def _positive_number(value):
@@ -115,7 +120,7 @@ def version_label(version):
     part_index, part_total = version.get("presentation_part_index"), version.get("presentation_part_total")
     if isinstance(part_index, int) and isinstance(part_total, int) and part_total > 1:
         parts.append("Part {} of {}".format(part_index, part_total))
-    return " · ".join(parts) or version_name(version)
+    return " · ".join(parts) or version_name(version) or "Media file"
 
 
 def subtitle_choices(version):

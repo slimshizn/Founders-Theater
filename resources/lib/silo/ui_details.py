@@ -205,11 +205,19 @@ def _join(*parts):
     return " · ".join(_text(part) for part in parts if _text(part))
 
 
+FILE_NAME_HIDDEN = "File name: not shared by the server for this account."
+
+
 def media_info_text(version):
-    """Container, video, audio and subtitle tracks of one file version."""
+    """Container, video, audio and subtitle tracks of one file version.
+
+    The file name leads when Silo sends it. Silo keeps it from accounts that may not curate
+    metadata; the text then ends with a line saying so, instead of a made-up name.
+    """
     if not version:
         return "No media details are available."
-    lines = [version_name(version)]
+    name = version_name(version)
+    lines = [name] if name else []
     duration = version.get("duration")
     bitrate = version.get("bitrate")
     lines.append(_join(_text(version.get("container")).upper(), _text(version.get("resolution")),
@@ -248,6 +256,8 @@ def media_info_text(version):
                                       _codec(track.get("codec")), "Forced" if track.get("forced") else "",
                                       "SDH" if track.get("hearing_impaired") else "",
                                       "External" if track.get("external") else ""))
+    if not name:
+        lines += ["", FILE_NAME_HIDDEN]
     return "\n".join(line for line in lines if line is not None)
 
 
@@ -476,7 +486,7 @@ class DetailsWindow(xbmcgui.WindowXML):
         self.setProperty("silo.has_file", "true" if version else "")
         if version:
             label, name = version_label(version), version_name(version)
-            self.setProperty("silo.file_label", "File: " + label + (" — " + name if name != label else ""))
+            self.setProperty("silo.file_label", "File: " + label + (" — " + name if name and name != label else ""))
         else:
             self.setProperty("silo.file_label", "File: No media files available")
 

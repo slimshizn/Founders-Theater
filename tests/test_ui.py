@@ -378,6 +378,23 @@ class ApplicationFlowTests(unittest.TestCase):
         self.assertEqual([section["id"] for section in sections], ["a", "d"])
         self.assertEqual(sections[1]["items"], [movie])
 
+    def test_home_sections_keep_a_row_of_collections(self):
+        # Silo answers a collection_posters row's cards in "collections"; its "items" are empty.
+        self.app.client.hubs.return_value = {"sections": [
+            {"id": "c", "title": "Collections", "section_type": "collection_posters", "items": [], "total_count": 2,
+             "collections": [{"id": "k1", "source": "library", "title": "Example Franchise", "item_count": 12,
+                              "library_id": "2", "poster_url": "/p.jpg"},
+                             {"id": "u1", "source": "user", "title": "Example Mine", "item_count": 3,
+                              "creator_profile_id": "p1"}]},
+            {"id": "e", "title": "No collections", "section_type": "collection_posters", "items": [],
+             "collections": []},
+        ]}
+        sections = self.app.home_sections()
+        self.assertEqual([section["id"] for section in sections], ["c"])
+        self.assertEqual([(card["id"], card["type"], card["kind"], card["library_id"], card["count"])
+                          for card in sections[0]["items"]],
+                         [("k1", "collection", "library", "2", 12), ("u1", "collection", "personal", None, 3)])
+
     def test_browse_adds_page_size_cursor_and_reports_next_page(self):
         self.app.addon.getSetting.side_effect = lambda key: "100" if key == "page_size" else ""
         self.app.client.items.return_value = {"items": [{"content_id": "m:2", "type": "movie"}],

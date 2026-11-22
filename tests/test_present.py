@@ -78,6 +78,20 @@ class HeroTests(unittest.TestCase):
     def test_badge_width_grows_with_text(self):
         self.assertLess(present.badge_width("HD"), present.badge_width("DOLBY VISION"))
 
+    def test_a_collection_card_has_its_own_hero(self):
+        card = {"id": "k1", "type": present.COLLECTION, "title": "Example Franchise", "count": 12,
+                "overview": "Every film.", "backdrop_url": "https://example.invalid/wide.jpg"}
+        hero = present.hero(card, lambda item, kind: item.get(kind + "_url", ""))
+        self.assertEqual(hero, {"backdrop": "https://example.invalid/wide.jpg", "logo": "", "title": "Example Franchise",
+                                "badges": [], "meta": "12 titles", "synopsis": "Every film."})
+        self.assertEqual(present.hero(dict(card, title=""), lambda item, kind: "", show_plot=False),
+                         {"backdrop": "", "logo": "", "title": "Collection", "badges": [], "meta": "12 titles",
+                          "synopsis": ""})
+
+    def test_count_text(self):
+        self.assertEqual([present.count_text(value) for value in (0, 1, 2, 1234, None, True, -1, "3")],
+                         ["0 titles", "1 title", "2 titles", "1,234 titles", "", "", "", ""])
+
 
 class DetailsTests(unittest.TestCase):
     def test_detail_meta_per_type(self):

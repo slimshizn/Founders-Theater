@@ -8,7 +8,7 @@ import xbmcgui
 
 from . import present, svc_boxsets, svc_personal
 from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_MOUSE_MOVE, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, Debouncer,
-                        box_set_list_item, card_list_item, set_properties)
+                        box_set_list_item, card_list_item, collection_list_item, set_properties)
 
 # Control ids; scripts/skin_home.py writes the matching SiloHome.xml.
 TOP_BAR, TAB_CLUSTER, SEARCH_BUTTON, AVATAR = 200, 202, 201, 230
@@ -48,6 +48,7 @@ SEARCH_CHIPS = {530: "video", 531: "movie", 532: "series"}
 # Box sets are movies, so they lead the All and Movies results only (Android TvSearchViewModel).
 BOX_SET_SEARCH_TYPES = ("video", "movie")
 BOX_SET = "box_set"
+COLLECTION = present.COLLECTION  # a card in a home row of collections
 LOAD_AHEAD = 12
 # (sort value, dialog label, chip label); values are the server's catalog sort fields.
 SORTS = (("title", "Title A–Z", "Title"), ("-added_at", "Recently added", "Recently added"),
@@ -153,6 +154,11 @@ def filter_groups(filters):
 
 def active_facets(filters):
     return sum(1 for facet, _label in FACETS if filters.get(facet))
+
+
+def card_key(item):
+    """What identifies a home card across a reload: a title's content id, a collection's id."""
+    return item.get("content_id") or item.get("id")
 
 
 def apply_row_prefs(sections, prefs):
@@ -466,8 +472,12 @@ class HomeWindow(xbmcgui.WindowXML):
             self.setFocusId(LIBRARY_CHIP)
         elif section == "recommended":
             self.run_modal(lambda: self.application.open_screen("library_sections", library=library), tab_button)
-        else:
+        elif library is not None:
             self.run_modal(lambda: self.application.open_screen("collections", library=library), tab_button)
+        else:
+            # All movies / All series: every library of the kind, not only the profile's own collections.
+            libraries = list(self.libraries.get(kind) or [])
+            self.run_modal(lambda: self.application.open_screen("collections", libraries=libraries), tab_button)
 
     def choose_for_you(self, control_id):
         choice = FOR_YOU_ITEMS[control_id]
@@ -572,7 +582,8 @@ class HomeWindow(xbmcgui.WindowXML):
         self.getControl(hidden).setVisible(False)
         control = self.getControl(shown)
         control.reset()
-        control.addItems([card_list_item(item, self.card_image, wide) for item in section["items"]])
+        control.addItems([collection_list_item(item, self.application.image) if item.get("type") == COLLECTION
+                          else card_list_item(item, self.card_image, wide) for item in section["items"]])
         control.setVisible(True)
         self.getControl(header).setLabel(str(section.get("title") or ""))
         self.getControl(header).setPosition(148 if wide else 88, 0)
@@ -610,14 +621,14 @@ class HomeWindow(xbmcgui.WindowXML):
         self.hero_debouncer.trigger()
 
     def card_at(self, control_id):
-        """(section id, content id, row, position) of the selected card in a home row, or None."""
+        """(section id, card key, row, position) of the selected card in a home row, or None."""
         row = self.row_of(control_id)
         if row is None:
             return None
         position = self.getControl(control_id).getSelectedPosition()
         items = self.sections[row]["items"]
         item = items[position] if 0 <= position < len(items) else {}
-        return self.sections[row].get("id"), item.get("content_id"), row, position
+        return self.sections[row].get("id"), card_key(item), row, position
 
     def refresh_home(self, card=None):
         """Reload the rows (Android refreshes on resume); refocus the same card when it still exists."""
@@ -634,7 +645,7 @@ class HomeWindow(xbmcgui.WindowXML):
             row, position = min(old_row, len(self.sections) - 1), 0
         else:
             items = self.sections[row]["items"]
-            position = next((index for index, item in enumerate(items) if item.get("content_id") == content_id),
+            position = next((index for index, item in enumerate(items) if card_key(item) == content_id),
                             min(old_position, len(items) - 1))
         self.focus_row(row)
         self.last_focus = self.row_list(row)  # Kodi's onInit after a child window refocuses this.
@@ -1195,7 +1206,7 @@ class HomeWindow(xbmcgui.WindowXML):
 
     def card_menu(self, control_id):
         item, row = self.context_card(control_id)
-        if item is None or item.get("type") == BOX_SET:  # A box set card has no item menu.
+        if item is None or item.get("type") in (BOX_SET, COLLECTION):  # These cards have no item menu.
             return
         marks = svc_personal.state(item)
         entries = [("watched", "Mark as unwatched" if marks["watched"] else "Mark as watched"),
@@ -1437,5 +1448,8 @@ class HomeWindow(xbmcgui.WindowXML):
         if item.get("type") == BOX_SET:
             self.run_modal(lambda: self.application.open_screen(
                 "box_set", box_set_id=item["id"], library_id=item["library_id"]), control_id)
+            return
+        if item.get("type") == COLLECTION:
+            self.run_modal(lambda: self.application.open_screen("collection", collection=item), control_id)
             return
         self.run_modal(lambda: self.application.open_item(item), control_id)

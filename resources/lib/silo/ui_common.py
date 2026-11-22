@@ -73,6 +73,17 @@ def card_list_item(item, image, wide=False):
     return result
 
 
+def collection_list_item(collection, image):
+    """A ListItem for a collection card: its title over its size, with its poster."""
+    result = xbmcgui.ListItem(label=collection.get("title") or "Collection",
+                              label2=present.count_text(collection.get("count")))
+    poster, backdrop = image(collection, "poster"), image(collection, "backdrop")
+    result.setArt({key: value for key, value in {"poster": poster or backdrop, "fanart": backdrop,
+                                                 "thumb": backdrop or poster}.items() if value})
+    result.setProperty("silo.plot", collection.get("overview") or "")
+    return result
+
+
 def box_set_list_item(found, image):
     """A search result's box set card: its poster under two sleeves, a Box set badge, the film
     count in the corner and the watched share as the progress bar (Android TvCatalogGrid).

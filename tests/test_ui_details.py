@@ -934,6 +934,25 @@ class DetailsWindowTests(unittest.TestCase):
         self.assertIn("• AAC", text)
         self.assertNotIn("Subtitles", text)
 
+    def test_media_info_leads_with_the_file_name_or_says_the_server_keeps_it(self):
+        version = {"file_id": "81234", "container": "mkv", "resolution": "1080p", "codec_video": "h264",
+                   "codec_audio": "aac"}
+        named = ui_details.media_info_text(dict(version, file_name="Example.2020.1080p.WEB-DL.x264-GROUP.mkv"))
+        self.assertEqual(named.splitlines()[0], "Example.2020.1080p.WEB-DL.x264-GROUP.mkv")
+        self.assertNotIn("File name:", named)
+        # Silo keeps the name from accounts that may not curate metadata: no made-up "File 81234".
+        hidden = ui_details.media_info_text(version)
+        self.assertEqual(hidden.splitlines()[0], "MKV · 1080p")
+        self.assertNotIn("81234", hidden)
+        self.assertEqual(hidden.splitlines()[-1], "File name: not shared by the server for this account.")
+
+    def test_file_label_without_a_file_name_shows_the_quality_alone(self):
+        item = movie_item()
+        del item["versions"][0]["file_name"]
+        window = self.window(item)
+        window.update_file_selection()
+        self.assertEqual(window.properties["silo.file_label"], "File: 2160p · HDR")
+
     def test_back_closes_window(self):
         window = self.window(movie_item())
         window.onAction(Action(92))

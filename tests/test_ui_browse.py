@@ -405,6 +405,43 @@ class CollectionTests(unittest.TestCase):
         window = run(ui_browse.open_collections, make_application(failing))[0]
         self.assertEqual(window.properties["silo.empty"], "Collections could not be loaded.")
 
+    def test_all_libraries_show_every_tab_then_the_profiles_own_collections(self):
+        films = {"library_id": "3", "collections": [], "groups": [],
+                 "ungrouped": {"collections": [{"id": "k1", "title": "Example Franchise", "item_count": 3}]}}
+        world = {"library_id": "4", "collections": [],
+                 "groups": [{"id": "g", "name": "Festivals", "kind": "admin",
+                             "collections": [{"id": "k2", "title": "Example Festival", "item_count": 5}]},
+                            {"id": "u", "name": "My collections", "kind": "user_collections",
+                             "collections": [{"id": "c1", "title": "Example Rainy Days", "creator_profile_id": "p1"}]}]}
+        own = {"items": [{"id": "c1", "name": "Example Rainy Days"}, {"id": "c7", "name": "Example Late Nights"}]}
+        client = FakeClient({"/library/3/collections": films, "/library/4/collections": world,
+                             "/library/5/collections": {"collections": [], "groups": []}, "/collections": own,
+                             "/library/4/collections/k2/items": lambda params: page([movie(1)])})
+        libraries = [{"id": 3, "name": "Example Films"}, {"id": 4, "name": "Example World"},
+                     {"id": 5, "name": "Example Empty"}]
+        window = run(ui_browse.open_collections, make_application(client), libraries=libraries)[0]
+        self.assertEqual([row["title"] for row in window.rows],
+                         ["Example Films", "Example World · Festivals", "Example World · My collections",
+                          "My collections"])
+        # A personal collection a library already shows is not repeated among the profile's own.
+        self.assertEqual([card["id"] for card in window.rows[3]["items"]], ["c7"])
+        # A library collection opens from the library that holds it.
+        run(window.open_collection, window.rows[1]["items"][0])
+        self.assertEqual(client.calls[-1][1:3], ("/library/4/collections/k2/items", {"limit": 50}))
+
+    def test_all_libraries_with_one_tab_keep_its_groups_and_skip_a_failing_library(self):
+        client = FakeClient({"/library/3/collections": self.library_tab(),
+                             "/library/4/collections": RuntimeError("offline"), "/collections": {"items": []}})
+        libraries = [{"id": 3, "name": "Example Films"}, {"id": 4, "name": "Example World"}]
+        window = run(ui_browse.open_collections, make_application(client), libraries=libraries)[0]
+        self.assertEqual([row["title"] for row in window.rows], ["Franchises", "Mine", "More collections"])
+        failing = FakeClient({"/library/3/collections": RuntimeError("offline"), "/collections": {"items": []}})
+        window = run(ui_browse.open_collections, make_application(failing), libraries=libraries[:1])[0]
+        self.assertEqual(window.properties["silo.empty"], "Collections could not be loaded.")
+        nothing = FakeClient({"/collections": {"items": []}})
+        window = run(ui_browse.open_collections, make_application(nothing), libraries=libraries)[0]
+        self.assertEqual(window.properties["silo.empty"], "No collections yet")
+
 
 # ---------------------------------------------------------------- library sections
 
@@ -612,6 +649,21 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(svc_browse.library_sections(client, 1), [])
         self.assertEqual(svc_browse.library_collections(client, 1), [])
         self.assertEqual(svc_browse.person(client, 2)["id"], "2")
+        self.assertEqual(svc_browse.all_collections(client, [{"id": 1}, {"name": "no id"}, None]), [])
+
+    def test_a_row_of_collections_becomes_collection_cards(self):
+        row = {"section_type": "collection_posters", "items": [], "collections": [
+            {"id": "k1", "source": "library", "title": "Example Franchise", "poster_url": "/p.jpg",
+             "backdrop_url": "/b.jpg", "item_count": 12, "library_id": "2"},
+            {"id": "u1", "source": "user", "title": "Example Mine", "item_count": 3, "creator_profile_id": "p1"},
+            {"id": "k2", "source": "library", "title": "Names no library"}, {"title": "no id"}, None]}
+        cards = svc_browse.section_collections(row)
+        self.assertEqual([(card["id"], card["type"], card["kind"], card["library_id"], card["count"])
+                          for card in cards],
+                         [("k1", "collection", "library", "2", 12), ("u1", "collection", "personal", None, 3)])
+        self.assertEqual((cards[0]["poster_url"], cards[0]["backdrop_url"]), ("/p.jpg", "/b.jpg"))
+        self.assertEqual(svc_browse.section_collections({"collections": "x"}), [])
+        self.assertEqual(svc_browse.section_collections(None), [])
 
     def test_page_cursor_only_when_more(self):
         client = FakeClient({"/catalog": {"items": [movie(1)], "page": {"has_more": False, "next_cursor": "x"},

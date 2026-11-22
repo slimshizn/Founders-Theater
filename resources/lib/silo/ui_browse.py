@@ -12,8 +12,9 @@ import os
 import xbmcgui
 
 from . import present, svc_browse, svc_personal
+from .present import count_text
 from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, Debouncer,
-                        card_list_item, set_properties)
+                        card_list_item, collection_list_item, set_properties)
 
 ACTION_CONTEXT_MENU = 117
 SCREEN_WIDTH = 1920
@@ -60,12 +61,6 @@ def slot_ids(index):
 def pill_width(text):
     """Estimated width of the top-bar title pill at the 25px bold tab font."""
     return 56 + 14 * len(text)
-
-
-def count_text(count):
-    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
-        return ""
-    return "{:,} title{}".format(count, "" if count == 1 else "s")
 
 
 # ------------------------------------------------------------------ data helpers
@@ -205,16 +200,6 @@ def person_facts(person):
     if died:
         parts.append("Died " + died)
     return " · ".join(parts)
-
-
-def collection_list_item(collection, image):
-    result = xbmcgui.ListItem(label=collection.get("title") or "Collection",
-                              label2=count_text(collection.get("count")))
-    poster, backdrop = image(collection, "poster"), image(collection, "backdrop")
-    result.setArt({key: value for key, value in {"poster": poster or backdrop, "fanart": backdrop,
-                                                 "thumb": backdrop or poster}.items() if value})
-    result.setProperty("silo.plot", collection.get("overview") or "")
-    return result
 
 
 def open_window(application, window_class, xml, **attributes):
@@ -800,13 +785,16 @@ def collection_opener(application, library):
     return lambda collection: open_collection(application, collection, library)
 
 
-def open_collections(application, library=None):
-    """Collections: the profile's own, or a library's Collections tab with its groups as rows."""
+def open_collections(application, library=None, libraries=None):
+    """Collections: a library's Collections tab with its groups as rows; for ``libraries`` (All
+    movies, All series) every one of those tabs and the profile's own; otherwise the profile's own."""
     client = application.client
     library_id = library.get("id") if isinstance(library, dict) else None
     title = "Collections"
     if library_id is not None:
         groups = application.guard(lambda: svc_browse.library_collections(client, library_id))
+    elif libraries:
+        groups = application.guard(lambda: svc_browse.all_collections(client, libraries))
     else:
         groups = application.guard(lambda: svc_browse.collections(client))
     opener = collection_opener(application, library)

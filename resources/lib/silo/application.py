@@ -16,7 +16,7 @@ from .auth import AuthController, DeviceAuthCancelled, DeviceAuthExpired, NATIVE
 from .media import (available_versions, default_version, format_time, is_multipart, matching_version,
                     resume_position, version_label, version_name)
 from .playback import PlaybackController
-from . import present, track_prefs
+from . import present, svc_browse, track_prefs
 from .present import avatar_image, video_items
 from .settings import read_options
 from .storage import SessionStore, StorageError
@@ -642,10 +642,17 @@ class Application:
             self.dialog.ok("Silo", exc.message or "The server could not complete the request.")
 
     def home_sections(self):
-        """Home rows in server order, with only video cards and no empty rows."""
+        """Home rows in server order, with only video cards and no empty rows.
+
+        A row of collections (section_type collection_posters) keeps its collections as
+        cards of type present.COLLECTION; Silo answers them in ``collections``, not ``items``.
+        """
         result = []
         for section in self.client.hubs().get("sections", []):
-            items = video_items(section.get("items"))
+            if section.get("section_type") == "collection_posters":
+                items = svc_browse.section_collections(section)
+            else:
+                items = video_items(section.get("items"))
             if items:
                 result.append(dict(section, items=items))
         return result
