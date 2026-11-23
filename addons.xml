@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <addons>
-  <addon id="plugin.video.silotheater" name="Founders Theater Widgets" version="1.1.0" provider-name="slimshizn">
+  <addon id="plugin.video.silotheater" name="Founders Theater Widgets" version="1.1.1" provider-name="slimshizn">
     <requires>
       <import addon="xbmc.python" version="3.0.1" />
       <import addon="script.founderstheater" version="0.9.0" />
@@ -13,9 +13,12 @@
       <description lang="en_GB">Shows your Silo home rows, Watchlist and Favorites as video folders that Kodi skins can use as home-screen widgets. Selecting a title plays it in Founders Theater, which must be installed and signed in. A community add-on, not an official Silo app.</description>
       <license>AGPL-3.0-or-later</license>
       <platform>all</platform>
+      <assets>
+        <icon>icon.png</icon>
+      </assets>
     </extension>
   </addon>
-  <addon id="repository.silo.theater" name="Founders Theater Repository" version="1.0.3" provider-name="slimshizn">
+  <addon id="repository.silo.theater" name="Founders Theater Repository" version="1.0.4" provider-name="slimshizn">
     <requires>
       <import addon="xbmc.addon" version="12.0.0" />
     </requires>
@@ -32,9 +35,12 @@
       <description lang="en_GB">The Founders Theater add-on repository provides installation packages and updates for Founders Theater.</description>
       <license>AGPL-3.0-or-later</license>
       <platform>all</platform>
+      <assets>
+        <icon>icon.png</icon>
+      </assets>
     </extension>
   </addon>
-  <addon id="script.founderstheater" name="Founders Theater" version="0.9.9" provider-name="slimshizn">
+  <addon id="script.founderstheater" name="Founders Theater" version="1.0.0" provider-name="slimshizn">
     <requires>
       <import addon="xbmc.python" version="3.0.1" />
       <import addon="xbmc.gui" version="5.17.0" />
@@ -49,6 +55,18 @@
       <disclaimer lang="en_GB">Founders Theater is not made or endorsed by the Silo project. Select HDR and Dolby Vision settings that your device and display support.</disclaimer>
       <license>AGPL-3.0-or-later</license>
       <platform>all</platform>
+      <news>v1.0.0 (2026-11-23)
+- A new Founders Theater icon for the add-on, its widgets and its repository.
+- Play next goes straight into the next episode in the version closest to the one you were watching, without asking which file.
+- The Collections row on Home shows again, and All movies and All series list the collections of every library plus your own.
+- Ratings use Silo's 1 to 10 scale, shown as stars, so they match the other Silo apps.
+- Media info no longer shows a made-up file name when the server keeps file names private.
+- The Favorite button shows a proper heart.
+- Silo's sessions and devices list this Kodi by its own name.
+- Playback reports reach Silo with their session, and server replies are compressed.</news>
+      <assets>
+        <icon>resources/icon.png</icon>
+      </assets>
     </extension>
   </addon>
   <addon id="script.silo" name="Founders Theater (update helper)" version="0.9.0" provider-name="slimshizn">
