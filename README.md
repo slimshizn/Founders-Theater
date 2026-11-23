@@ -1,4 +1,6 @@
 <p align="center">
+  <img src="resources/icon.png" alt="" width="160">
+  <br><br>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/founders-theater-dark.png">
     <source media="(prefers-color-scheme: light)" srcset=".github/assets/founders-theater-light.png">
@@ -47,7 +49,7 @@
 
 1. Open **Settings → File manager → Add source**, enter `https://slimshizn.github.io/Founders-Theater/` and name it **Founders Theater**.
 2. Open **Add-ons → Install from zip file → Founders Theater**, and allow unknown sources if Kodi asks.
-3. Select **repository.silo.theater-1.0.3.zip**.
+3. Select **repository.silo.theater-1.0.4.zip**.
 4. Open **Install from repository → Founders Theater Repository** and install **Founders Theater**.
 
 Open Founders Theater and sign in with your server address and Silo account. Updates arrive through the repository. For home screen widgets, also install **Founders Theater Widgets** from the same repository (**Video add-ons**).

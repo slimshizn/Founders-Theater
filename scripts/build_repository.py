@@ -22,6 +22,8 @@ except ImportError:
 
 
 REPOSITORY_ID = "repository.silo.theater"
+# The icon Kodi shows for Founders Theater, its widgets and this repository.
+ICON = Path("resources/icon.png")
 PAGES_BASE = "https://slimshizn.github.io/Founders-Theater/"
 DOWNLOAD_BASE = "https://raw.githubusercontent.com/slimshizn/Founders-Theater/gh-pages/"
 
@@ -30,7 +32,7 @@ def validate_repository(root: Path) -> ET.Element:
     """Validate the installer manifest against its fixed public endpoint."""
     root = Path(root).resolve()
     source = root / "repository" / REPOSITORY_ID
-    for path in (source, source / "addon.xml", root / "LICENSE"):
+    for path in (source, source / "addon.xml", root / "LICENSE", root / ICON):
         if path.is_symlink():
             raise ValueError("Repository inputs cannot be symlinks: {}".format(path.name))
     try:
@@ -48,6 +50,8 @@ def validate_repository(root: Path) -> ET.Element:
         raise ValueError("The repository license must be AGPL-3.0-or-later")
     if not (root / "LICENSE").is_file():
         raise ValueError("The repository LICENSE is missing")
+    if not (root / ICON).is_file():
+        raise ValueError("The add-on icon {} is missing".format(ICON.as_posix()))
     extensions = manifest.findall("./extension[@point='xbmc.addon.repository']")
     if len(extensions) != 1:
         raise ValueError("The repository needs one repository extension")
@@ -75,6 +79,7 @@ def _repository_zip(root: Path, manifest: ET.Element) -> bytes:
     files = {
         "LICENSE": (root / "LICENSE").read_bytes(),
         "addon.xml": (root / "repository" / REPOSITORY_ID / "addon.xml").read_bytes(),
+        "icon.png": (root / ICON).read_bytes(),
     }
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for name, contents in sorted(files.items()):
@@ -136,7 +141,8 @@ def _extra_addon(root: Path, folder_name: str, addon_id: str, sources):
 
 def _widgets(root: Path):
     folder = root / "widgets"
-    return _extra_addon(root, "widgets", WIDGETS_ID, [(name, folder / name) for name in ("addon.xml", "default.py")])
+    sources = [(name, folder / name) for name in ("addon.xml", "default.py")] + [("icon.png", root / ICON)]
+    return _extra_addon(root, "widgets", WIDGETS_ID, sources)
 
 
 def _bridge(root: Path, addon: Dict[str, str]):
@@ -217,14 +223,15 @@ def build_repository(root: Path = ROOT, output_dir: Optional[Path] = None) -> Di
     for path, contents in packages.items():
         _write(path, contents)
         _write(path.with_suffix(path.suffix + ".sha256"), hashlib.sha256(contents).hexdigest().encode("ascii") + b"\n")
-    # Kodi's repository browser shows each add-on's icon from datadir before
-    # install. Icons are not versioned, so they are replaced on every build.
-    icons = {output / "zips" / addon["id"] / "resources" / "icon.png": root / "resources" / "icon.png"}
+    # Kodi's repository browser shows each add-on's icon from datadir, at the
+    # path its manifest names, before install. Icons are not versioned, so
+    # they are replaced on every build. All three add-ons share one icon.
+    icon = (root / ICON).read_bytes()
+    icons = [output / "zips" / addon["id"] / ICON, output / "zips" / REPOSITORY_ID / "icon.png"]
     if widgets is not None:
-        icons[output / "zips" / WIDGETS_ID / "icon.png"] = root / "widgets" / "icon.png"
-    for path, source in icons.items():
-        if source.is_file():  # The add-ons currently use Kodi's default icon.
-            _write(path, source.read_bytes())
+        icons.append(output / "zips" / WIDGETS_ID / "icon.png")
+    for path in icons:
+        _write(path, icon)
     _write(output / "addons.xml", catalog_bytes)
     _write(output / "addons.xml.md5", checksum)
     _write(output / "index.html", landing_page)

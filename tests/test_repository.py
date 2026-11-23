@@ -3,6 +3,7 @@
 import hashlib
 from pathlib import Path
 import shutil
+import struct
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -60,7 +61,8 @@ class RepositoryTests(unittest.TestCase):
                          "zips/script.founderstheater/{}".format(self.addon_filename))
         self.assertEqual(paths["installer"].read_bytes(), paths["repository_zip"].read_bytes())
         with zipfile.ZipFile(paths["installer"]) as archive:
-            self.assertEqual(archive.namelist(), [REPOSITORY_ID + "/LICENSE", REPOSITORY_ID + "/addon.xml"])
+            self.assertEqual(archive.namelist(), [REPOSITORY_ID + "/LICENSE", REPOSITORY_ID + "/addon.xml",
+                                                  REPOSITORY_ID + "/icon.png"])
             self.assertEqual(archive.read(REPOSITORY_ID + "/LICENSE"), (self.root / "LICENSE").read_bytes())
             manifest = ET.fromstring(archive.read(REPOSITORY_ID + "/addon.xml"))
             self.assertEqual(manifest.get("provider-name"), "slimshizn")
@@ -141,6 +143,34 @@ class RepositoryTests(unittest.TestCase):
 
 
 
+class IconTests(unittest.TestCase):
+    """Founders Theater, its widgets and its repository show the Founders Theater icon in Kodi."""
+
+    def test_each_addon_ships_its_icon_and_the_repository_serves_it(self):
+        icon = (ROOT / "resources/icon.png").read_bytes()
+        with tempfile.TemporaryDirectory() as folder:
+            build_repository(ROOT, Path(folder))
+            catalog = ET.parse(Path(folder) / "addons.xml").getroot()
+            for addon in catalog:
+                addon_id = addon.get("id")
+                if addon_id == BRIDGE_ID:
+                    continue  # The deprecated update helper keeps Kodi's default icon.
+                path = addon.findtext("extension[@point='xbmc.addon.metadata']/assets/icon")
+                self.assertTrue(path, addon_id)
+                package = Path(folder) / "zips" / addon_id / "{}-{}.zip".format(addon_id, addon.get("version"))
+                with zipfile.ZipFile(package) as archive:
+                    self.assertEqual(archive.read("{}/{}".format(addon_id, path)), icon, addon_id)
+                # Kodi's repository browser loads it from here before install.
+                self.assertEqual((Path(folder) / "zips" / addon_id / path).read_bytes(), icon, addon_id)
+
+    def test_the_icon_is_a_square_png_kodi_can_show(self):
+        data = (ROOT / "resources/icon.png").read_bytes()
+        self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+        width, height = struct.unpack(">II", data[16:24])
+        self.assertEqual(width, height)
+        self.assertGreaterEqual(width, 256)
+
+
 class WidgetsAddonTests(unittest.TestCase):
     """Widgets ship as their own add-on so Founders Theater is listed once in Kodi."""
 
@@ -156,7 +186,7 @@ class WidgetsAddonTests(unittest.TestCase):
             with zipfile.ZipFile(package) as archive:
                 self.assertEqual(sorted(archive.namelist()), [
                     "plugin.video.silotheater/LICENSE", "plugin.video.silotheater/addon.xml",
-                    "plugin.video.silotheater/default.py"])
+                    "plugin.video.silotheater/default.py", "plugin.video.silotheater/icon.png"])
             silo = catalog.find("addon[@id='script.founderstheater']")
             self.assertIsNone(silo.find("extension[@point='xbmc.python.pluginsource']"))
 
