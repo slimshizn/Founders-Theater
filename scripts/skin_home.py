@@ -251,7 +251,8 @@ def top_bar():
               image(0, 0, 56, 56, "$INFO[Window.Property(silo.avatar)]", diffuse="mask_circle.png",
                     aspect="scale", background=True)]
     return group(200, 0, 56, 1920, 64, [
-        label(88, 0, 520, 64, "[COLOR FFE8CF8F]FOUNDERS[/COLOR] THEATER", "font25_title", "FFFFFFFF"),
+        # The FT icon in the corner, the size of the avatar on the right.
+        image(88, 4, 56, 56, "ft_icon.png", aspect="keep"),
         group(202, 404, 0, 1200, 64, search + tabs),
         # Kodi's clock, in the time format set in Kodi, just left of the avatar.
         label(1560, 0, 200, 64, "$INFO[System.Time]", "font25_title", SECONDARY, "right"),

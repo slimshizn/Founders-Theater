@@ -192,7 +192,7 @@ def hub():
               aspect="scale", fade=400, background=True),
         image(0, 0, 1920, 240, "scrim_top.png", color=BLACK),
         group(None, 0, 56, 1920, 64, [
-            label(88, 0, 400, 64, "[COLOR FFE8CF8F]FOUNDERS[/COLOR] THEATER", "font25_title", "FFFFFFFF"),
+            image(88, 4, 56, 56, "ft_icon.png", aspect="keep"),
             label(480, 0, 400, 64, "Requests", "font36_title", MUTED),
             label(1560, 0, 272, 64, "$INFO[System.Time]", "font25_title", SECONDARY, "right"),
         ]),

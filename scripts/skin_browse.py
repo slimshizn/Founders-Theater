@@ -187,9 +187,9 @@ def card_list(list_id, kind, left, top, width, height, item_width, item_height, 
 # ---------------------------------------------------------------- shared parts
 
 def top_bar():
-    """Wordmark lockup on the left and the screen name as a selected tab in the middle."""
+    """The FT icon on the left and the screen name as a selected tab in the middle."""
     return group(100, 0, 56, 1920, 64, [
-        label(88, 0, 520, 64, "[COLOR FFE8CF8F]FOUNDERS[/COLOR] THEATER", "font25_title", "FFFFFFFF"),
+        image(88, 4, 56, 56, "ft_icon.png", aspect="keep"),
         image(860, 2, 200, 60, "pill60_selected.png", border=30, control_id=102, condition=has("silo.title")),
         label(560, 2, 800, 60, "$INFO[{}]".format(prop("silo.title")), "font25_title", TEXT, "center",
               control_id=103),

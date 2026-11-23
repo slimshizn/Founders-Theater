@@ -804,15 +804,23 @@ class SkinTests(unittest.TestCase):
                     for texture in filter(None, names):
                         self.assertTrue((MEDIA / texture).is_file(), (name, texture))
 
-    def test_every_screen_shows_the_lockup_and_the_community_line(self):
+    def test_every_screen_shows_the_ft_icon_and_the_community_line(self):
         for name in self.NAMES:
             tree = ET.parse(SKIN / name)
             labels = [node.findtext("label") for node in tree.iter("control")]
             self.assertIn(DISCLAIMER, labels, name)
-            # The install page's lockup: FOUNDERS in gold and THEATER in white, with no icon.
-            self.assertIn("[COLOR FFE8CF8F]FOUNDERS[/COLOR] THEATER", labels, name)
-            # Only the add-on's name, never the Silo wordmark (it must not look official).
+            # The add-on's own FT icon in the top-left corner, where its name used to be.
+            textures = [node.findtext("texture") for node in tree.iter("control")]
+            self.assertIn("ft_icon.png", textures, name)
+            # Never the Silo wordmark (it must not look official).
             self.assertNotIn("silo_wordmark.png", (SKIN / name).read_text(encoding="utf-8"), name)
+
+    def test_the_ft_icon_replaces_the_name_in_every_corner(self):
+        for path in sorted(SKIN.glob("*.xml")):
+            self.assertNotIn("[COLOR FFE8CF8F]FOUNDERS[/COLOR] THEATER", path.read_text(encoding="utf-8"), path.name)
+        for name in ("SiloHome.xml", "SiloBrowseRows.xml", "SiloBrowseGrid.xml", "SiloPerson.xml",
+                     "SiloRequests.xml", "SiloSettings.xml") + self.NAMES:
+            self.assertIn("<texture>ft_icon.png</texture>", (SKIN / name).read_text(encoding="utf-8"), name)
 
     def test_masks_follow_the_control_not_the_cropped_image(self):
         # Kodi scales a diffuse mask with a "scale" image by default, so a portrait photo in a
@@ -823,8 +831,9 @@ class SkinTests(unittest.TestCase):
                 if re.search(r'(?<!color)diffuse="mask_', block) and ">scale</aspectratio>" in block:
                     self.assertIn('<aspectratio scalediffuse="false">scale</aspectratio>', block, path.name)
 
-    def test_no_screen_shows_an_icon_beside_the_name(self):
-        # The Silo app icon must not read as this add-on's own logo.
+    def test_the_silo_app_icon_is_never_shown_as_ours(self):
+        # The Silo app icon (once brand_icon.png) must not read as this add-on's own logo;
+        # the add-on's own mark is the FT icon (ft_icon.png).
         for path in sorted((SKIN).glob("*.xml")):
             self.assertNotIn("brand_icon.png", path.read_text(encoding="utf-8"), path.name)
         self.assertFalse((MEDIA / "brand_icon.png").exists())
