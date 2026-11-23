@@ -2,6 +2,7 @@
 
 import hashlib
 from pathlib import Path
+import re
 import shutil
 import struct
 import tempfile
@@ -169,6 +170,23 @@ class IconTests(unittest.TestCase):
         width, height = struct.unpack(">II", data[16:24])
         self.assertEqual(width, height)
         self.assertGreaterEqual(width, 256)
+
+
+class SiteTests(unittest.TestCase):
+    """The website's images and icons are files the build publishes beside its pages."""
+
+    def test_every_page_has_the_icon_and_its_images_are_published(self):
+        site = ROOT / "site"
+        for page in sorted(site.glob("*.html")):
+            text = page.read_text(encoding="utf-8")
+            images = re.findall(r'<img[^>]*\ssrc="([^"]+)"', text)
+            icons = re.findall(r'<link rel="(?:icon|apple-touch-icon)"[^>]*\shref="([^"]+)"', text)
+            self.assertIn("icon.png", icons, page.name)
+            self.assertIn("icon.png", images, page.name)
+            for name in images + icons:
+                # build_repository publishes a site's .svg and .png files beside its pages.
+                self.assertIn(Path(name).suffix, (".svg", ".png"), "{} uses {}".format(page.name, name))
+                self.assertTrue((site / name).is_file(), "{} uses {}".format(page.name, name))
 
 
 class WidgetsAddonTests(unittest.TestCase):
