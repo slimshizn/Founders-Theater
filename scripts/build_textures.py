@@ -236,19 +236,28 @@ def draw_bookmark_filled(draw, s):
     draw.polygon(_bookmark_shape(s), fill=OPAQUE)
 
 
+def _heart_path(s, r):
+    """Points around a heart of lobe radius ``r``, from its tip and back.
+
+    A square standing on one corner with a half circle on each upper side: each lobe
+    runs into its side without a corner, and the lobes meet in one dip at the top.
+    Centred top to bottom in the icon.
+    """
+    k = r / math.sqrt(2)
+    x, tip = s * 0.5, s * 0.5 + (r + 3 * k) / 2
+    # The right lobe starts one step past the dip, where the left one ends.
+    lobes = [(x - k, angle) for angle in range(135, 316, 3)] + [(x + k, angle) for angle in range(228, 406, 3)]
+    return ([(x, tip)]
+            + [(cx + r * math.cos(math.radians(a)), tip - 3 * k + r * math.sin(math.radians(a))) for cx, a in lobes]
+            + [(x, tip)])
+
+
 def _heart(draw, s, fill):
-    r = s * 0.19
-    left, right, top = (s * 0.33, s * 0.38), (s * 0.67, s * 0.38), s * 0.38
-    outline = None if fill else OPAQUE
-    width = 0 if fill else int(s * 0.075)
+    # Filled is the outline filled in, so favouriting a title doesn't change the heart's size.
+    points = _heart_path(s, s * 0.19)
     if fill:
-        draw.ellipse([left[0] - r, top - r, left[0] + r, top + r], fill=OPAQUE)
-        draw.ellipse([right[0] - r, top - r, right[0] + r, top + r], fill=OPAQUE)
-        draw.polygon([(s * 0.15, s * 0.44), (s * 0.85, s * 0.44), (s * 0.50, s * 0.84)], fill=OPAQUE)
-    else:
-        draw.arc([left[0] - r, top - r, left[0] + r, top + r], 150, 360, fill=outline, width=width)
-        draw.arc([right[0] - r, top - r, right[0] + r, top + r], 180, 30, fill=outline, width=width)
-        _stroke(draw, [(s * 0.165, s * 0.47), (s * 0.50, s * 0.84), (s * 0.835, s * 0.47)], width)
+        draw.polygon(points, fill=OPAQUE)
+    _stroke(draw, points, int(s * 0.075))
 
 
 def draw_heart(draw, s):
