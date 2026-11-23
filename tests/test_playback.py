@@ -1684,12 +1684,16 @@ class ConvertedSessionTests(unittest.TestCase):
 class ScriptedExtras:
     """Stands in for PlaybackExtras: returns one scripted command per tick."""
 
-    def __init__(self, commands=()):
+    def __init__(self, commands=(), at_end=None):
         self.commands = list(commands)
         self.plans, self.interactions, self.closed = [], 0, False
+        self.end_command = at_end
 
     def tick(self, position, paused=False, total=None):
         return self.commands.pop(0) if self.commands else None
+
+    def at_end(self):
+        return self.end_command
 
     def update_plan(self, plan, quality=None):
         self.plans.append((plan, quality))
@@ -1935,6 +1939,24 @@ class ConvertedControllerTests(KodiHarness):
         state = self.run_player(FakeClient(), [(1, None), (2, None)], start=0)
         self.assertEqual(state.controller.next_action["auto"], True)
         self.assertEqual(PlaybackController.streak.count, 2)
+
+    def test_a_file_that_ends_under_the_up_next_countdown_plays_next(self):
+        PlaybackController.streak.count = 2
+        command = {"stop": "next", "item": {"content_id": "e2"}, "auto": True}
+        self.fake_extras = ScriptedExtras(at_end=command)
+        state = self.run_player(FakeClient(), [(1, None), (2, "end")], start=0)
+        self.assertEqual(state.controller.next_action, command)
+        self.assertTrue(state.result["ended"])
+        self.assertTrue(any("event=up_next_at_end" in line for line in state.logs))
+        self.assertEqual(PlaybackController.streak.count, 2)
+
+    def test_a_stop_or_an_end_without_the_countdown_plays_nothing_next(self):
+        for action, at_end in (("stop", {"stop": "next", "item": {"content_id": "e2"}, "auto": True}),
+                               ("end", None)):
+            with self.subTest(action=action):
+                self.fake_extras = ScriptedExtras(at_end=at_end)
+                state = self.run_player(FakeClient(), [(1, None), (2, action)], start=0)
+                self.assertIsNone(state.controller.next_action)
 
     def test_any_other_ending_resets_the_streak(self):
         for command in ({"stop": "next", "item": {"content_id": "e2"}, "auto": False}, {"stop": "sleep"}, None):

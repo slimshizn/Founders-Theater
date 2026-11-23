@@ -1642,6 +1642,14 @@ class PlaybackController:
                 raise PlaybackError("Kodi reported a playback error.")
             log_event("native_ended" if player.ended else "native_stopped",
                       latest_sample[0] if latest_sample else None)
+            if player.ended and extras is not None and self.next_action is None:
+                # Kodi ended the file while Up next counted down (Skip credits on credits
+                # that run to the last frame lands there): the next episode still plays.
+                command = extras.at_end()
+                if command:
+                    self.next_action = command
+                    self.transition = self._show_transition(command.get("item"), log_event)
+                    log_event("up_next_at_end", latest_sample[0] if latest_sample else None)
         except (ApiError, PlaybackError) as error:
             log_event("failure_" + stage, error=error)
             stop_local()

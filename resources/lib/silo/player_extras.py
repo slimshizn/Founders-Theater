@@ -458,6 +458,22 @@ class PlaybackExtras:
                     command["subtitle"] = current_subtitle(self.plan)
         return command
 
+    def at_end(self):
+        """The file ended under the Up next countdown: Play next, as Silo's apps do.
+
+        Kodi can end the file first: Skip credits on credits that run to the
+        last frame lands half a second before the end, and the countdown can
+        outlast what is left. It counts as the countdown running out. Without
+        a countdown (autoplay off, still watching, card hidden) nothing plays.
+        """
+        if self.next_state != "shown" or self.countdown_until is None or self.still:
+            return None
+        self.up_next.hide()
+        self.next_state = "done"
+        self.log("up_next_at_end")
+        self.streak.advanced()
+        return {"stop": "next", "item": self.next_item, "auto": True}
+
     # ---------------------------------------------------------------- loop
 
     def tick(self, position, paused=False, total=None, now=None):

@@ -244,6 +244,52 @@ class ExtrasTests(unittest.TestCase):
         extras.tick(3135, total=3210, now=2)
         self.assertEqual(self.skip.shown, ("Skip Credits",))
 
+    def test_skip_credits_that_run_to_the_end_still_plays_next(self):
+        # Credits that end on the file's last frame: Skip credits lands just before the end
+        # and Kodi ends the file before the countdown does. Silo's apps play next at the end.
+        extras = self.extras()
+        extras.tick(3080, total=3202, now=0)
+        extras.tick(3134, total=3202, now=1)
+        self.next_card.choice = "skip"
+        self.assertIsNone(extras.tick(3135, total=3202, now=2))
+        self.player.seekTime.assert_called_once_with(3201.5)
+        command = extras.at_end()
+        self.assertEqual(command, {"stop": "next", "item": extras.next_item, "auto": True})
+        self.assertEqual(command["item"]["content_id"], "episode-2")
+        self.assertIsNone(self.next_card.shown)
+        self.assertEqual(extras.streak.count, 1)  # counted like the countdown running out
+        self.assertIsNone(extras.at_end())  # only once
+
+    def test_the_file_ending_under_the_countdown_plays_next(self):
+        extras = self.extras()
+        extras.tick(3080, total=3210, now=0)
+        extras.tick(3134, total=3210, now=1)
+        self.assertEqual(extras.at_end()["stop"], "next")
+
+    def test_the_file_ending_without_a_countdown_plays_nothing(self):
+        cases = {"before the card": lambda extras: extras.tick(3080, total=3210, now=0),
+                 "autoplay off": lambda extras: (extras.tick(3080, total=3210, now=0),
+                                                 extras.tick(3134, total=3210, now=1))}
+        for name, steps in cases.items():
+            with self.subTest(name):
+                extras = self.extras(auto_next=name != "autoplay off")
+                steps(extras)
+                self.assertIsNone(extras.at_end())
+        with self.subTest("hidden"):
+            extras = self.extras()
+            extras.tick(3080, total=3210, now=0)
+            extras.tick(3134, total=3210, now=1)
+            self.next_card.choice = "dismiss"
+            extras.tick(3135, total=3210, now=2)
+            self.assertIsNone(extras.at_end())
+        with self.subTest("still watching"):
+            extras = self.extras(still_watching=1)
+            extras.streak.advanced()
+            extras.tick(3080, total=3210, now=0)
+            extras.tick(3134, total=3210, now=1)
+            self.assertTrue(self.next_card.kwargs["still"])
+            self.assertIsNone(extras.at_end())
+
     def test_movies_never_offer_up_next(self):
         extras = self.extras(item={"content_id": "movie-1", "type": "movie", "title": "Example"})
         extras.tick(3140, total=3210, now=0)
