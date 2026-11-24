@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="script.founderstheater" name="Founders Theater" version="1.0.0" provider-name="slimshizn">
+<addon id="script.founderstheater" name="Founders Theater" version="1.1.0" provider-name="slimshizn">
   <requires>
     <import addon="xbmc.python" version="3.0.1" />
     <import addon="xbmc.gui" version="5.17.0" />
@@ -14,15 +14,16 @@
     <disclaimer lang="en_GB">Founders Theater is not made or endorsed by the Silo project. Select HDR and Dolby Vision settings that your device and display support.</disclaimer>
     <license>AGPL-3.0-or-later</license>
     <platform>all</platform>
-    <news>v1.0.0 (2026-11-23)
-- A new Founders Theater icon for the add-on, its widgets and its repository.
-- Play next goes straight into the next episode in the version closest to the one you were watching, without asking which file.
-- The Collections row on Home shows again, and All movies and All series list the collections of every library plus your own.
-- Ratings use Silo's 1 to 10 scale, shown as stars, so they match the other Silo apps.
-- Media info no longer shows a made-up file name when the server keeps file names private.
-- The Favorite button shows a proper heart.
-- Silo's sessions and devices list this Kodi by its own name.
-- Playback reports reach Silo with their session, and server replies are compressed.</news>
+    <news>v1.1.0 (2026-11-24)
+- Watch Party, where your Silo server offers it: join with a code from the profile menu, or host one from a title page's More menu, and watch in step with everyone.
+- Movie and series pages show the collections that hold them.
+- A collection's page can be sorted, filtered and shuffled.
+- Series and season pages offer Start over, Version, Audio and Subtitles for the episode up next.
+- OK on an episode plays it; hold OK to mark it watched or a favorite, or to open its page. The episode row runs on into the next and previous season.
+- Hold OK on a title card to mark it watched or add it to your watchlist or favorites, and on Continue Watching to play or resume it.
+- Search says where Kodi's keyboard takes speech: hold OK on Android, or Return on a Mac.
+- Play next still starts the next episode when the file ends during the Up next countdown.
+- The FT icon in the top-left corner of every screen and on the website.</news>
     <assets>
       <icon>resources/icon.png</icon>
     </assets>
