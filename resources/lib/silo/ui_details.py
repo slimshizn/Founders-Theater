@@ -306,6 +306,9 @@ class DetailsWindow(xbmcgui.WindowXML):
     def __init__(self, *args, **kwargs):
         self.application = None
         self.item = {}
+        # On a series or season page, the next-up episode's own detail: Play, Start over and
+        # the Version, Audio and Subtitles choosers act on it (see target()).
+        self.next_up = None
         self.children = []
         self.initialized = False
         self.selected_file_id = None
@@ -367,6 +370,7 @@ class DetailsWindow(xbmcgui.WindowXML):
         options = self.application.options()
         self.show_plot = options["show_plot"]
         self.hide_spoilers = bool(options.get("hide_spoilers"))
+        self.load_next_up()
         self.update_file_selection()
         self.default_subtitle()
         self.update_subtitle_selection()
@@ -426,7 +430,7 @@ class DetailsWindow(xbmcgui.WindowXML):
             title = _text(self.item.get("title") or self.item.get("name")) or "Synopsis"
             self.application.dialog.textviewer(title, self.hero_overview)
         elif control_id == VERSION:
-            file_id = self.application.choose_file(self.item, self.selected_file_id)
+            file_id = self.application.choose_file(self.target(), self.selected_file_id)
             if file_id is not None:
                 self.refresh(file_id)
         elif control_id == AUDIO:
@@ -436,24 +440,20 @@ class DetailsWindow(xbmcgui.WindowXML):
             chosen = self.application.choose_subtitle(choices, self.subtitle_index)
             if chosen is not False:
                 self.subtitle_index, self.subtitle_source = chosen, "picked"
-                version = default_version(self.item, preferred_file_id=self.selected_file_id)
+                target = self.target()
+                version = default_version(target, preferred_file_id=self.selected_file_id)
                 remember = getattr(self.application, "remember_subtitle", None)
                 if callable(remember):
-                    self.application.guard(lambda: remember(self.item, version, chosen))
+                    self.application.guard(lambda: remember(target, version, chosen))
                 self.update_subtitle_selection()
                 self.setProperty("silo.hint", self.hint(SUBTITLES))
         elif control_id == NEXT_UP and self.item.get("play_content_id"):
-            if self.application.play_next(self.item) is not None:
+            if self.next_up:
+                self.play_target(None)
+            elif self.application.play_next(self.item) is not None:
                 self.reload_episodes()
         elif control_id in (PLAY, RESUME, START_OVER):
-            resume = {PLAY: None, RESUME: True, START_OVER: False}[control_id]
-            # Play the version shown on this screen; Version is how to change it.
-            # A track picked with Audio is passed on; otherwise preferences decide.
-            audio = {"audio_index": self.audio_index} if self.audio_source == "picked" else {}
-            file_id = self.application.play(self.item, resume=resume, file_id=self.selected_file_id,
-                                            subtitle_index=self.subtitle_index, **audio)
-            if file_id is not None:
-                self.refresh(file_id, after_playback=True)
+            self.play_target({PLAY: None, RESUME: True, START_OVER: False}[control_id])
         elif control_id == SEASONS:
             self.season_settle.cancel()
             self.season_settled()
@@ -487,9 +487,67 @@ class DetailsWindow(xbmcgui.WindowXML):
         position = self.getControl(control_id).getSelectedPosition()
         return items[position] if 0 <= position < len(items) else None
 
+    def play_target(self, resume):
+        """Play what the page plays (see target()) as the page shows it: the version on screen
+        (Version changes it), and a track picked with Audio; otherwise preferences decide."""
+        audio = {"audio_index": self.audio_index} if self.audio_source == "picked" else {}
+        file_id = self.application.play(self.target(), resume=resume, file_id=self.selected_file_id,
+                                        subtitle_index=self.subtitle_index, **audio)
+        if file_id is not None:
+            self.refresh(file_id, after_playback=True)
+
+    # ------------------------------------------------------------- next up
+    def plays_next_up(self):
+        return self.item.get("type") in ("series", "season")
+
+    def target(self):
+        """What Play, Start over and the choosers act on: the page's own title, or on a series
+        or season page its next-up episode ({} until that episode's detail is read)."""
+        return (self.next_up or {}) if self.plays_next_up() else self.item
+
+    def load_next_up(self):
+        """Read a series or season page's next-up episode, so its versions, tracks and progress
+        drive the buttons (Android nextUpPlaybackDetail). Without it, Next Up plays as before."""
+        self.next_up = None
+        content_id = self.item.get("play_content_id")
+        if not self.plays_next_up() or not content_id:
+            return
+        try:
+            episode = self.application.client.item(content_id)
+        except Exception:  # Optional: Next Up still plays the episode without it.
+            return
+        if isinstance(episode, dict) and episode.get("content_id") == content_id \
+                and self.application.is_playable(episode):
+            self.next_up = episode
+
+    def refresh_series(self, file_id, after_playback):
+        """A series or season page reads itself again. After playback, or once another episode
+        is next up, the choices start over from that episode's own defaults."""
+        before = (self.next_up or {}).get("content_id")
+        self.item = self.application.refresh_item(self.item)
+        if after_playback or not self.next_up or self.item.get("play_content_id") != before:
+            self.selected_file_id = None
+            self.load_next_up()
+            self.default_subtitle()
+            self.default_audio()
+        else:
+            self.next_up = self.application.refresh_item(self.next_up, file_id)
+            if file_id != self.selected_file_id:
+                self.selected_file_id = file_id
+                self.default_subtitle()
+                self.default_audio()
+        self.update_file_selection()
+        self.update_subtitle_selection()
+        self.update_audio_selection()
+        self.update_actions()
+        if self.hero_episode is None:
+            self.show_hero()
+        if after_playback:
+            self.reload_children()
+
     # ------------------------------------------------------------- versions
     def update_file_selection(self):
-        version = default_version(self.item, self.application.options()["file_selection"], self.selected_file_id)
+        version = default_version(self.target(), self.application.options()["file_selection"], self.selected_file_id)
         self.selected_file_id = version["file_id"] if version else None
         self.setProperty("silo.has_file", "true" if version else "")
         if version:
@@ -499,14 +557,15 @@ class DetailsWindow(xbmcgui.WindowXML):
             self.setProperty("silo.file_label", "File: No media files available")
 
     def subtitle_options(self):
-        version = default_version(self.item, preferred_file_id=self.selected_file_id)
+        version = default_version(self.target(), preferred_file_id=self.selected_file_id)
         return subtitle_choices(version)
 
     def default_subtitle(self):
         """Start from the remembered choice or the profile's subtitle preferences."""
-        version = default_version(self.item, preferred_file_id=self.selected_file_id)
+        target = self.target()
+        version = default_version(target, preferred_file_id=self.selected_file_id)
         try:
-            index, source = self.application.subtitle_default(self.item, version)
+            index, source = self.application.subtitle_default(target, version)
         except (AttributeError, TypeError, ValueError):
             index, source = None, "auto"
         self.subtitle_index = index if isinstance(index, int) and not isinstance(index, bool) else None
@@ -525,15 +584,16 @@ class DetailsWindow(xbmcgui.WindowXML):
 
     def audio_options(self):
         """(ordinal, label) for each audio track of the version on screen."""
-        version = default_version(self.item, preferred_file_id=self.selected_file_id)
+        version = default_version(self.target(), preferred_file_id=self.selected_file_id)
         tracks = (version or {}).get("audio_tracks") or []
         return [(index, audio_track_label(track, index)) for index, track in enumerate(tracks)]
 
     def default_audio(self):
         """Start from the track playback would choose: Silo's saved preference first."""
-        version = default_version(self.item, preferred_file_id=self.selected_file_id)
+        target = self.target()
+        version = default_version(target, preferred_file_id=self.selected_file_id)
         try:
-            index, _language = self.application.audio_default(self.item, version)
+            index, _language = self.application.audio_default(target, version)
         except (AttributeError, TypeError, ValueError):
             index = None
         self.audio_index = index if isinstance(index, int) and not isinstance(index, bool) else None
@@ -557,17 +617,19 @@ class DetailsWindow(xbmcgui.WindowXML):
         if not isinstance(chosen, int) or not 0 <= chosen < len(choices):
             return
         self.audio_index, self.audio_source = indexes[chosen], "picked"
-        version = default_version(self.item, preferred_file_id=self.selected_file_id)
+        target = self.target()
+        version = default_version(target, preferred_file_id=self.selected_file_id)
         remember = getattr(self.application, "remember_audio", None)
         if callable(remember):
-            self.application.guard(lambda: remember(self.item, version, indexes[chosen]))
+            self.application.guard(lambda: remember(target, version, indexes[chosen]))
         self.update_audio_selection()
         self.setProperty("silo.hint", self.hint(AUDIO))
 
     def update_resume(self):
-        resume = self.application.resume_seconds(self.item)
-        playable = self.application.is_playable(self.item)
-        version = default_version(self.item, preferred_file_id=self.selected_file_id)
+        target = self.target()
+        resume = self.application.resume_seconds(target) if target else 0
+        playable = bool(target) and self.application.is_playable(target)
+        version = default_version(target, preferred_file_id=self.selected_file_id)
         # A shared item offset is not a valid seek point inside a multipart file.
         self.can_resume = bool(playable and resume > 0 and not is_multipart(version))
         self.resume_label = "Resume from {}".format(format_time(resume))
@@ -576,6 +638,9 @@ class DetailsWindow(xbmcgui.WindowXML):
         return resume
 
     def refresh(self, file_id, after_playback=False):
+        if self.plays_next_up():
+            self.refresh_series(file_id, after_playback)
+            return
         item = (self.application.item_after_playback(self.item, file_id) if after_playback
                 else self.application.refresh_item(self.item, file_id))
         changed_file = file_id != self.selected_file_id
@@ -598,17 +663,20 @@ class DetailsWindow(xbmcgui.WindowXML):
     def update_actions(self):
         """Work out which buttons show, their labels, and lay the row out."""
         resume = self.update_resume()
-        playable = bool(self.application.is_playable(self.item))
+        target = self.target()
+        # On a series or season page the Next Up capsule plays the next-up episode, and the
+        # circles after it act on that episode once its detail is read.
+        playable = bool(target) and bool(self.application.is_playable(target))
         start_first = self.application.options()["resume_behavior"] == "start"
         has_file = self.selected_file_id is not None
         self.play_label = "Resume " + format_time(resume) if self.can_resume and not start_first else "Play"
         shown = {
-            NEXT_UP: bool(self.item.get("type") in ("series", "season") and self.item.get("play_content_id")),
-            PLAY: playable,
+            NEXT_UP: bool(self.plays_next_up() and self.item.get("play_content_id")),
+            PLAY: playable and not self.plays_next_up(),
             # With "start", Play starts over, so Resume needs its own button.
             RESUME: self.can_resume and start_first,
             START_OVER: self.can_resume,
-            VERSION: playable and len(available_versions(self.item)) > 1,
+            VERSION: playable and len(available_versions(target)) > 1,
             AUDIO: playable and len(self.audio_options()) > 1,
             SUBTITLES: playable and bool(self.subtitle_options()),
             WATCHLIST: bool(self.item.get("content_id")),
@@ -617,7 +685,8 @@ class DetailsWindow(xbmcgui.WindowXML):
         }
         marks = svc_personal.state(self.item)
         set_properties(self, {
-            "silo.playable": "true" if playable else "",
+            "silo.playable": "true" if shown[PLAY] else "",
+            "silo.choosers": "true" if playable else "",
             "silo.play_label": self.play_label,
             "silo.resume_button": "true" if shown[RESUME] else "",
             "silo.multi_version": "true" if shown[VERSION] else "",
@@ -637,6 +706,8 @@ class DetailsWindow(xbmcgui.WindowXML):
         content_id = self.item.get("play_content_id")
         if not content_id:
             return None
+        if self.next_up:
+            return self.next_up
         for episodes in [self.episodes] + list(self.episode_cache.values()):
             for episode in episodes:
                 if episode.get("content_id") == content_id:
@@ -644,7 +715,12 @@ class DetailsWindow(xbmcgui.WindowXML):
         return None
 
     def update_next_up_label(self):
-        verb = "Resume" if resume_position(self.item) > 0 else "Play"
+        if self.next_up:
+            # The episode's own progress, read as Play reads it ("start" plays from the beginning).
+            start_first = self.application.options()["resume_behavior"] == "start"
+            verb = "Resume" if self.can_resume and not start_first else "Play"
+        else:
+            verb = "Resume" if resume_position(self.item) > 0 else "Play"
         episode = self.next_up_episode() or {}
         season, number = episode.get("season_number"), episode.get("episode_number")
         if self.item.get("type") == "series" and season is not None and number is not None:
@@ -674,7 +750,7 @@ class DetailsWindow(xbmcgui.WindowXML):
         if control_id == START_OVER:
             return "Start over"
         if control_id == VERSION:
-            version = default_version(self.item, preferred_file_id=self.selected_file_id)
+            version = default_version(self.target(), preferred_file_id=self.selected_file_id)
             return "Version: " + version_label(version) if version else ""
         if control_id == SUBTITLES:
             return self.subtitle_label
@@ -1318,7 +1394,7 @@ class BoxSetWindow(DetailsWindow):
             "silo.has_file": "true" if movies else "",
             "silo.play_label": self.play_label,
             "silo.resume": "", "silo.resume_button": "", "silo.multi_version": "", "silo.continue": "",
-            "silo.marks": "", "silo.has_subtitles": "", "silo.has_audio_choice": "",
+            "silo.marks": "", "silo.has_subtitles": "", "silo.has_audio_choice": "", "silo.choosers": "",
         })
         self.visible_buttons = [PLAY] if movies else []
         self.focusable_buttons = list(self.visible_buttons)

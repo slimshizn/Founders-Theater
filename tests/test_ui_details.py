@@ -971,6 +971,98 @@ def box_set_found(count=3, played=()):
                        "user_state": {"played": index in played}} for index in range(1, count + 1)]}
 
 
+def next_up_detail(content_id="episode:1-2", position=300):
+    number = int(content_id.rsplit("-", 1)[1])
+    episode = dict(episodes_for({"season_number": 1})[number - 1], series_id="series:1", series_title="Example Show",
+                   versions=movie_item(multiple=True)["versions"],
+                   user_data={"position_seconds": position, "duration_seconds": 2520, "last_file_id": "file-a"})
+    episode["versions"][0]["audio_tracks"] = [{"language": "eng", "codec": "ac3", "channels": 6},
+                                              {"language": "fre", "codec": "aac", "channels": 2}]
+    episode["versions"][0]["subtitle_tracks"] = [{"index": 3, "language": "eng", "external": False}]
+    return episode
+
+
+class NextUpControlsTests(unittest.TestCase):
+    """A series or season page acts on its next-up episode: Start over, Version, Audio and
+    Subtitles bind to that episode's own detail (Android nextUpPlaybackDetail)."""
+
+    setUp = DetailsWindowTests.setUp
+    window = DetailsWindowTests.window
+
+    def open(self, detail=None, item=None, children=SEASONS):
+        self.app.client.item.side_effect = lambda content_id, **params: (
+            detail if detail is not None else next_up_detail(content_id))
+        window = self.window(item or series_item(), children)
+        window.onInit()
+        return window
+
+    def test_the_series_page_offers_start_over_and_choosers_for_its_next_up_episode(self):
+        window = self.open()
+        self.app.client.item.assert_called_once_with("episode:1-2")
+        self.assertEqual(window.visible_buttons, [105, 104, 103, 110, 106] + MARKS)
+        self.assertEqual(window.properties["silo.continue_label"], "Resume S1:E2")
+        self.assertEqual(window.properties["silo.playable"], "")  # The series has no Play capsule of its own.
+        self.assertEqual(window.properties["silo.choosers"], "true")
+        self.assertEqual(window.properties["silo.resume"], "true")
+        self.assertEqual(window.selected_file_id, "file-a")
+        window.onFocus(103)
+        self.assertTrue(window.properties["silo.hint"].startswith("Version: "))
+
+    def test_next_up_and_start_over_play_the_episode_with_the_pages_choices(self):
+        window = self.open()
+        self.app.choose_subtitle.return_value = 0
+        window.onClick(106)
+        self.app.play.return_value = "file-a"
+        self.app.refresh_item.side_effect = lambda item, file_id=None: (
+            series_item(play_content_id="episode:1-3") if item.get("type") == "series" else item)
+        window.onClick(105)
+        self.app.play_next.assert_not_called()
+        played, kwargs = self.app.play.call_args.args[0], self.app.play.call_args.kwargs
+        self.assertEqual(played["content_id"], "episode:1-2")
+        self.assertEqual((kwargs["resume"], kwargs["file_id"], kwargs["subtitle_index"]), (None, "file-a", 0))
+        # After playback the page reads the series again and moves on to its new next-up episode.
+        self.assertEqual(self.app.client.item.call_args.args[0], "episode:1-3")
+        self.assertEqual(window.properties["silo.continue_label"], "Resume S1:E3")
+        window.onClick(104)
+        self.assertEqual(self.app.play.call_args.args[0]["content_id"], "episode:1-3")
+        self.assertIs(self.app.play.call_args.kwargs["resume"], False)
+
+    def test_version_picks_a_file_of_the_next_up_episode(self):
+        window = self.open()
+        self.app.choose_file.return_value = "file-b"
+        self.app.refresh_item.side_effect = lambda item, file_id=None: item
+        window.onClick(103)
+        self.assertEqual(self.app.choose_file.call_args.args[0]["content_id"], "episode:1-2")
+        self.assertEqual(window.selected_file_id, "file-b")
+        self.app.refresh_item.assert_any_call(next_up_detail(), "file-b")
+        self.app.play.return_value = "file-b"
+        window.onClick(105)
+        self.assertEqual(self.app.play.call_args.kwargs["file_id"], "file-b")
+
+    def test_a_season_page_acts_on_its_next_up_episode_too(self):
+        season = {"content_id": "season:1", "type": "season", "season_number": 1, "title": "Season 1",
+                  "play_content_id": "episode:1-2", "series_id": "series:1"}
+        window = self.open(item=season, children=episodes_for({"season_number": 1}))
+        self.assertEqual(window.visible_buttons, [105, 104, 103, 110, 106] + MARKS)
+        self.assertEqual(window.properties["silo.continue_label"], "Resume E2")
+
+    def test_without_the_episodes_detail_next_up_plays_as_before(self):
+        for detail in ({"content_id": "episode:other", "type": "episode"}, OSError("offline")):
+            with self.subTest(detail=type(detail).__name__):
+                self.app.reset_mock()
+                self.app.guard.side_effect = lambda callback: callback()
+                if isinstance(detail, Exception):
+                    self.app.client.item.side_effect = detail
+                    window = self.window(series_item(), SEASONS)
+                    window.onInit()
+                else:
+                    window = self.open(detail)
+                self.assertEqual(window.visible_buttons, [105] + MARKS)
+                self.assertEqual(window.properties["silo.choosers"], "")
+                window.onClick(105)
+                self.app.play_next.assert_called_once_with(window.item)
+
+
 def collection_card(number, count=8):
     return {"id": "k{}".format(number), "type": "collection", "kind": "library", "library_id": "2",
             "title": "Example Franchise {}".format(number), "overview": "", "poster_url": "/p{}.jpg".format(number),

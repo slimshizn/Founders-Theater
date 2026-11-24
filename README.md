@@ -31,6 +31,7 @@
 **Watch**
 - Plays original files directly, and has your server convert what your device can't play.
 - Choose the version, audio and subtitles before you press play. Your choices are saved to your Silo profile, so they follow you to the other Silo apps.
+- On a series or season page, Start over, Version, Audio and Subtitles act on the episode up next, beside the button that plays it.
 - Skip Intro, Recap and Credits, Up next with a countdown, and Are you still watching?
 - Play next goes straight into the next episode in the version closest to the one you were watching, without asking which file, and in the quality you picked. It asks only when the episode doesn't offer that quality.
 - A player menu on the remote's Menu key: info, stats, quality, speed, aspect, sleep timer, audio, subtitles (including online search, AI translation and sync) and chapters.

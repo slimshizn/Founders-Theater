@@ -60,8 +60,9 @@ BUTTONS = (
     (101, "circle", "icon_resume.png", has("silo.resume_button"), ENABLED),
     (104, "circle", "icon_restart.png", has("silo.resume"), ENABLED),
     (103, "circle", "icon_versions.png", has("silo.multi_version"), ENABLED),
-    (110, "circle", "icon_audio.png", has("silo.playable") + " + " + has("silo.has_audio_choice"), None),
-    (106, "circle", "icon_subtitles.png", has("silo.playable") + " + " + has("silo.has_subtitles"), None),
+    # silo.choosers: what the page plays is ready, the next-up episode on a series or season page.
+    (110, "circle", "icon_audio.png", has("silo.choosers") + " + " + has("silo.has_audio_choice"), None),
+    (106, "circle", "icon_subtitles.png", has("silo.choosers") + " + " + has("silo.has_subtitles"), None),
     (107, "circle", ("swap", "icon_bookmark.png", "icon_bookmark_filled.png", "silo.in_watchlist"), MARKS, None),
     (108, "circle", ("swap", "icon_heart.png", "icon_heart_filled.png", "silo.favorite"), MARKS, None),
     (109, "circle", "icon_more.png", MARKS, None),
