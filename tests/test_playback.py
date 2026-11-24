@@ -553,6 +553,15 @@ class PlaybackSessionTests(unittest.TestCase):
                 self.assertIn("HDR and Dolby Vision capability", str(error.exception))
                 self.assertIn("Maximum video resolution", str(error.exception))
 
+    def test_a_refusal_carries_its_reason(self):
+        for reason in ("hdr_transcode_unsupported", "source_unreadable"):
+            decision = {"protocol_version": 3, "server_features": [], "outcome": "terminal",
+                        "terminal": {"reason": reason, "message": "server wording", "retryable": False}}
+            with self.assertRaises(PlaybackError) as error:
+                PlaybackSession(FakeClient(decision)).start("file-a")
+            self.assertEqual(error.exception.reason, reason)
+        self.assertIsNone(PlaybackError("Kodi reported a playback error.").reason)
+
     def test_other_terminals_keep_the_server_message(self):
         decision = {"protocol_version": 3, "server_features": [], "outcome": "terminal",
                     "terminal": {"reason": "source_unreadable", "message": "The file is unreadable", "retryable": False}}
@@ -796,8 +805,32 @@ class FakeParty:
         self.ticks.append((position, paused, stalled))
         return self.script.pop(0) if self.script else []
 
+    def refused(self, file_id, reason):
+        self.refusals = getattr(self, "refusals", []) + [(file_id, reason)]
+        return getattr(self, "takes_over", False)
+
 
 class PartyControllerTests(KodiHarness):
+    def refusal(self):
+        return {"protocol_version": 3, "server_features": [], "outcome": "terminal",
+                "terminal": {"reason": "no_alternate_version", "message": "No version fits", "retryable": False}}
+
+    def test_a_refused_start_asks_the_room_for_another_file_instead_of_failing(self):
+        self.party = FakeParty([])
+        self.party.takes_over = True
+        state = self.run_player(FakeClient(self.refusal()), [], file_id="file-a")
+        self.assertEqual(self.party.refusals, [("file-a", "no_alternate_version")])
+        self.assertEqual(state.dialogs, [])
+        self.assertEqual(self.party.attached, [])
+        self.assertTrue(any("event=party_fallback" in line for line in state.logs))
+
+    def test_a_refusal_the_room_cannot_answer_is_shown(self):
+        self.party = FakeParty([])
+        state = self.run_player(FakeClient(self.refusal()), [], file_id="file-a")
+        self.assertEqual(self.party.refusals, [("file-a", "no_alternate_version")])
+        self.assertEqual(len(state.dialogs), 1)
+        self.assertIn("No version fits", state.dialogs[0][1])
+
     def test_a_party_member_attaches_waits_paused_and_follows_the_room(self):
         self.party = FakeParty([[("pause",)], [("seek", 42.0)], [], [("stop", "lobby")]])
         state = self.run_player(FakeClient(), [(1 + index * 0.25, None) for index in range(20)])

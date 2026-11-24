@@ -49,6 +49,64 @@ class FakeSession:
         return [frame["type"] for frame in self.sent]
 
 
+class FallbackTests(unittest.TestCase):
+    """A refused start asks the room for another file; only the room ever picks one."""
+
+    def session(self, answer=None, fallback=True, **room):
+        session = FakeSession(Time(), **room)
+        session.room_id, session.token, session.support = "r1", "eyJ.a", {"fallback": fallback}
+        session.calls = []
+
+        class Client:
+            def request(client, method, path, body=None, params=None, headers=None):
+                session.calls.append((method, path, body, headers))
+                if isinstance(answer, Exception):
+                    raise answer
+                return answer
+
+        session.client = Client()
+
+        def accept_http(room, token):
+            session.room.update(room)
+            session.token = token
+
+        session.accept_http = accept_http
+        return session
+
+    def moved(self, revision=3):
+        return {"room": {"phase": "playing", "selection_revision": revision, "selected_file_id": "43"},
+                "room_access_token": "eyJ.b"}
+
+    def test_the_room_moves_everyone_to_another_file(self):
+        session = self.session(self.moved())
+        binding = party_sync.RoomPlayback(session)
+        self.assertTrue(binding.refused("42", "no_alternate_version"))
+        self.assertEqual(session.calls[-1][1:], ("/watch-together/rooms/r1/source-fallback",
+                                                 {"selection_revision": 2, "failed_file_id": "42",
+                                                  "reason": "no_alternate_version"}, {"X-Room-Token": "eyJ.a"}))
+        self.assertEqual(binding.stopped, "changed")
+        self.assertEqual(session.token, "eyJ.b")
+
+    def test_only_the_rooms_reasons_on_a_server_that_offers_it_and_the_current_file(self):
+        for reason, fallback, room in (("transcode_start_failed", True, {}), (None, True, {}),
+                                       ("no_alternate_version", False, {})):
+            session = self.session(self.moved(), fallback=fallback, **room)
+            self.assertFalse(party_sync.RoomPlayback(session).refused("42", reason))
+            self.assertEqual(session.calls, [])
+        session = self.session(self.moved())
+        binding = party_sync.RoomPlayback(session)
+        session.room["selection_revision"] = 3  # The room already moved on.
+        self.assertFalse(binding.refused("42", "no_alternate_version"))
+        self.assertEqual(session.calls, [])
+
+    def test_no_other_file_or_an_unchanged_room_keeps_the_refusal(self):
+        for answer in (party_sync.ApiError(409, "No other source", "conflict"), self.moved(revision=2)):
+            session = self.session(answer)
+            binding = party_sync.RoomPlayback(session)
+            self.assertFalse(binding.refused("42", "hdr_transcode_unsupported"))
+            self.assertIsNone(binding.stopped)
+
+
 def command(time, action, position, after=0.5, state="playing", command_id="c1", revision=2, session_id=None):
     return {"command_id": command_id, "action": action, "position_seconds": position,
             "execute_at": party_sync.room_clock.format_instant(time.server() + after, digits=9),

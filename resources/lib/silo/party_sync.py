@@ -21,7 +21,8 @@ becomes the room's.
 
 import time
 
-from . import room_clock
+from . import room_clock, svc_party
+from .api import ApiError
 
 ATTACH_RETRY = 2.0
 READY_INTERVAL = 0.5
@@ -91,6 +92,27 @@ class RoomPlayback:
             return None
         position, executed, playing = self.reference
         return position + max(0.0, server_now - executed) if playing else position
+
+    def refused(self, file_id, reason):
+        """The server refused to play the room's file here. Only for the room's own reasons,
+        on a server that offers it, and while the room still plays that file, ask the room to
+        move everyone to another file; True when it did (the player then starts again). No
+        other file is ever chosen here."""
+        support = getattr(self.session, "support", None) or {}
+        room = self.session.snapshot()
+        if (reason not in svc_party.FALLBACK_REASONS or not support.get("fallback")
+                or room.get("selection_revision") != self.revision or not isinstance(self.revision, int)):
+            return False
+        try:
+            answer = svc_party.fallback(self.session.client, self.session.room_id, self.session.token,
+                                        self.revision, file_id, reason)
+        except (ApiError, OSError, ValueError):
+            return False  # 409: no other file fits; the refusal stands.
+        self.session.accept_http(*answer)
+        if answer[0].get("selection_revision") in (None, self.revision):
+            return False
+        self.stopped = "changed"
+        return True
 
     # ------------------------------------------------------------ the tick
     def _stop(self, reason):

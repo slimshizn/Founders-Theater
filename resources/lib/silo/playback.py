@@ -54,7 +54,12 @@ def player_near(player, target):
 
 
 class PlaybackError(Exception):
-    """A plan cannot be executed by this build."""
+    """A plan cannot be executed by this build. ``reason`` is the server's terminal reason
+    when the server refused playback (a Watch Party may answer some by falling back)."""
+
+    def __init__(self, message="", reason=None):
+        super().__init__(message)
+        self.reason = reason
 
 
 # Terminal reasons a 201 carries when the original file exceeds what this
@@ -320,9 +325,10 @@ class PlaybackSession:
             raise PlaybackError("The server did not return playback protocol 3.")
         if decision.get("outcome") != "playable":
             terminal = decision.get("terminal") or {}
-            if terminal.get("reason") in CAPABILITY_TERMINALS:
-                raise PlaybackError(CAPABILITY_GUIDANCE)
-            raise PlaybackError(terminal.get("message") or terminal.get("reason") or "No playable route is available.")
+            reason = terminal.get("reason") if isinstance(terminal.get("reason"), str) else None
+            if reason in CAPABILITY_TERMINALS:
+                raise PlaybackError(CAPABILITY_GUIDANCE, reason=reason)
+            raise PlaybackError(terminal.get("message") or reason or "No playable route is available.", reason=reason)
         plan = decision.get("playback_plan") or {}
         self.session_id = decision.get("session_id") or plan.get("session_id")
         if not self.session_id:
@@ -1475,11 +1481,13 @@ class PlaybackController:
             threading.Thread(target=run, name="silo-party-menu", daemon=True).start()
 
         recovery, previous = StallRecovery(), None
+        requested_file = None
         try:
             version = "".join(char for char in self.addon.getAddonInfo("version") if char in "0123456789.")[:24]
             log_event("begin_v" + (version or "unknown"))
             start_requested_at[0] = time.monotonic()
-            plan = session.start(str(file_id) if file_id is not None else select_file(item), start_position)
+            requested_file = str(file_id) if file_id is not None else select_file(item)
+            plan = session.start(requested_file, start_position)
             log_event("plan_ready", session.position)
             carried = str(options.get("carried_quality") or "auto")
             if carried != "auto":
@@ -1722,7 +1730,13 @@ class PlaybackController:
         except (ApiError, PlaybackError) as error:
             log_event("failure_" + stage, error=error)
             stop_local()
-            xbmcgui.Dialog().ok("Silo — playback", str(error))
+            reason = getattr(error, "reason", None)
+            if (party is not None and reason and session.session_id is None and requested_file is not None
+                    and party.refused(requested_file, reason)):
+                # The server refused the room's file here; the room moved everyone to another one.
+                log_event("party_fallback")
+            else:
+                xbmcgui.Dialog().ok("Silo — playback", str(error))
         except RuntimeError:
             # A user stop can race AV/track setup. Keep exception strings out of
             # diagnostics, and do not call native stop after its callback.
