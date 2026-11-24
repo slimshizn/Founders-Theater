@@ -127,6 +127,9 @@ class DetailsWindowTests(unittest.TestCase):
         self.app.similar.return_value = []
         self.app.episodes.side_effect = episodes_for
         self.app.box_sets_on.return_value = False
+        patcher = patch.object(ui_details.svc_browse, "item_collections", return_value=None)  # No collections row.
+        self.item_collections = patcher.start()
+        self.addCleanup(patcher.stop)
 
     def window(self, item, children=()):
         window = DetailsWindow("SiloDetails.xml", ".")
@@ -968,6 +971,101 @@ def box_set_found(count=3, played=()):
                        "user_state": {"played": index in played}} for index in range(1, count + 1)]}
 
 
+def collection_card(number, count=8):
+    return {"id": "k{}".format(number), "type": "collection", "kind": "library", "library_id": "2",
+            "title": "Example Franchise {}".format(number), "overview": "", "poster_url": "/p{}.jpg".format(number),
+            "backdrop_url": "", "count": count}
+
+
+def preview_titles(count=2):
+    return [{"content_id": "movie:{}".format(index), "type": "movie", "title": "Other {}".format(index)}
+            for index in range(10, 10 + count)]
+
+
+class CollectionsRowTests(unittest.TestCase):
+    """The collections row on a movie or series page (Android TvItemCollectionsRow)."""
+
+    setUp = DetailsWindowTests.setUp
+    window = DetailsWindowTests.window
+
+    def open(self, item, found, children=()):
+        self.item_collections.return_value = found
+        window = self.window(item, children)
+        window.onInit()
+        return window
+
+    def entries(self, window):
+        return window.getControl(ui_details.COLLECTIONS).addItems.call_args[0][0]
+
+    def test_one_collection_shows_its_other_titles_then_explore_all(self):
+        window = self.open(movie_item(), {"cards": [collection_card(1)], "preview": preview_titles()})
+        self.item_collections.assert_called_once_with(self.app.client, "movie:1")
+        entries = self.entries(window)
+        self.assertEqual([entry.label for entry in entries], ["Other 10", "Other 11", "Explore all"])
+        self.assertEqual(entries[2].properties["silo.explore"], "true")
+        self.assertEqual(entries[2].label2, "8 titles")
+        self.assertEqual(window.properties["silo.collections_title"], "Example Franchise 1")
+        self.assertEqual(window.properties["silo.has_collections"], "true")
+        self.assertIn("collections", window.available_zones())
+
+    def test_several_collections_or_no_preview_show_an_also_in_row(self):
+        for found in ({"cards": [collection_card(1), collection_card(2, 3)], "preview": []},
+                      {"cards": [collection_card(1)], "preview": []}):
+            with self.subTest(cards=len(found["cards"])):
+                window = self.open(movie_item(), found)
+                entries = self.entries(window)
+                self.assertEqual([entry.label for entry in entries], [card["title"] for card in found["cards"]])
+                self.assertEqual(entries[0].label2, "8 titles")
+                self.assertEqual(entries[0].art["poster"], "https://img.example//p1.jpg/poster")
+                self.assertEqual(window.properties["silo.collections_title"], "Also in")
+
+    def test_cards_open_titles_and_collections(self):
+        card = collection_card(1)
+        window = self.open(movie_item(), {"cards": [card], "preview": preview_titles()})
+        row = window.getControl(ui_details.COLLECTIONS)
+        row.getSelectedPosition.return_value = 1
+        window.onClick(ui_details.COLLECTIONS)
+        self.app.open_item.assert_called_once_with(preview_titles()[1])
+        row.getSelectedPosition.return_value = 2  # Explore all
+        window.onClick(ui_details.COLLECTIONS)
+        self.app.open_screen.assert_called_once_with("collection", collection=card)
+        other = collection_card(2)
+        window = self.open(movie_item(), {"cards": [card, other], "preview": []})
+        window.getControl(ui_details.COLLECTIONS).getSelectedPosition.return_value = 1
+        window.onClick(ui_details.COLLECTIONS)
+        self.app.open_screen.assert_called_with("collection", collection=other)
+
+    def test_only_movies_and_series_ask_and_an_empty_or_failed_read_hides_the_row(self):
+        episode = dict(episodes_for({"season_number": 1})[0], series_id="series:1")
+        window = self.open(episode, {"cards": [collection_card(1)], "preview": []})
+        self.item_collections.assert_not_called()
+        self.assertEqual(window.properties["silo.has_collections"], "")
+        for found in (None, {"cards": [], "preview": []}):
+            window = self.open(movie_item(), found)
+            self.assertEqual(window.properties["silo.has_collections"], "")
+            self.assertNotIn("collections", window.available_zones())
+        self.item_collections.side_effect = OSError("offline")
+        window = self.open(movie_item(), None)
+        self.assertEqual(window.properties["silo.has_collections"], "")
+
+    def test_a_series_shows_the_row_under_its_cast_and_a_movie_under_its_box_set(self):
+        found = {"cards": [collection_card(1)], "preview": preview_titles()}
+        series = self.open(series_item(cast=[{"name": "Actor One"}]), found, SEASONS)
+        self.assertEqual(series.available_zones(), ["buttons", "seasons", "episodes", "cast", "collections"])
+        series.getControl(ui_details.COLLECTIONS_GROUP).setPosition.assert_called_with(
+            0, ui_details.SECTIONS_TOP_SERIES + ui_details.CAST_HEIGHT)
+        self.app.box_sets_on.return_value = True
+        self.app.similar.return_value = [{"content_id": "movie:9", "type": "movie", "title": "Other"}]
+        with patch.object(ui_details.svc_boxsets, "for_item", return_value=box_set_found()):
+            movie = self.open(dict(movie_item(), content_id="movie:2", cast=[{"name": "Actor One"}]), found)
+        self.assertEqual(movie.available_zones(), ["buttons", "cast", "boxset", "collections", "similar"])
+        movie.getControl(ui_details.COLLECTIONS_GROUP).setPosition.assert_called_with(
+            0, ui_details.SECTIONS_TOP + ui_details.CAST_HEIGHT + ui_details.BOXSET_HEIGHT)
+        movie.getControl(ui_details.SIMILAR_GROUP).setPosition.assert_called_with(
+            0, ui_details.SECTIONS_TOP + ui_details.CAST_HEIGHT + ui_details.BOXSET_HEIGHT
+            + ui_details.COLLECTIONS_HEIGHT)
+
+
 class BoxSetTests(unittest.TestCase):
     """A movie's box set row and the box set page (Android TvBoxSetRow and TvBoxSetScreen)."""
 
@@ -995,7 +1093,9 @@ class BoxSetTests(unittest.TestCase):
         self.assertEqual(window.properties["silo.boxset_title"], "Example Box Set")
         self.assertEqual(window.properties["silo.has_boxset"], "true")
         self.assertEqual(ui_details.ZONES.index("boxset"), ui_details.ZONES.index("extras") + 1)
-        self.assertEqual(ui_details.ZONES.index("similar"), ui_details.ZONES.index("boxset") + 1)
+        # A movie's collections row sits between its box set and More like this.
+        self.assertEqual(ui_details.ZONES.index("collections"), ui_details.ZONES.index("boxset") + 1)
+        self.assertEqual(ui_details.ZONES.index("similar"), ui_details.ZONES.index("collections") + 1)
         self.assertIn("boxset", window.available_zones())
         window.getControl(ui_details.BOXSET_GROUP).setPosition.assert_called_with(0, ui_details.SECTIONS_TOP)
         window.similar = [{"content_id": "movie:9", "type": "movie"}]

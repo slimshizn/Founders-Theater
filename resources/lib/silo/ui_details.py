@@ -17,30 +17,34 @@ from urllib.parse import quote, urlsplit
 import xbmc
 import xbmcgui
 
-from . import present, svc_boxsets, svc_personal, svc_shuffle
+from . import present, svc_boxsets, svc_browse, svc_personal, svc_shuffle
 from .api import ApiError
 from .present import is_unwatched, language_name
 from .media import (available_versions, default_version, format_time, is_multipart, resume_position,
                     subtitle_choices, version_label, version_name)
 from .player_extras import audio_track_label
 from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, Debouncer,
-                        card_list_item, set_properties)
+                        card_list_item, collection_list_item, set_properties)
 
 PLAY, RESUME, VERSION, START_OVER, NEXT_UP, SUBTITLES = 100, 101, 103, 104, 105, 106
 WATCHLIST, FAVORITE, MORE, AUDIO = 107, 108, 109, 110
 # Read more opens the full synopsis when it is longer than the three lines the hero shows.
 READ_MORE, PLOT_PREVIEW = 112, 230
-SEASONS, EPISODES, CAST, SIMILAR, BOXSET, EXTRAS, FACTS = 510, 520, 530, 540, 550, 560, 570
+SEASONS, EPISODES, CAST, SIMILAR, BOXSET, EXTRAS, FACTS, COLLECTIONS = 510, 520, 530, 540, 550, 560, 570, 580
 PAGE, CAST_GROUP, SIMILAR_GROUP, BOXSET_GROUP, EXTRAS_GROUP, FACTS_GROUP = 1000, 3000, 4000, 4500, 5000, 6000
+COLLECTIONS_GROUP = 4600
 SUPERTITLE, TITLE, TITLE2 = 1101, 1102, 1103
 CHIP, CHIP_LABEL, BADGE, BADGE_LABEL, META = 1201, 1202, 1211, 1221, 1230
 # A button's group id is 1300 + its id; the order is the on-screen order.
 BUTTON_ORDER = (NEXT_UP, PLAY, RESUME, START_OVER, VERSION, AUDIO, SUBTITLES, WATCHLIST, FAVORITE, MORE)
 CAPSULES = (NEXT_UP, PLAY)
-# Android puts a movie's box set between the trailers and More Like This.
-ZONES = ("synopsis", "buttons", "seasons", "episodes", "cast", "extras", "boxset", "similar", "facts")
+# Android puts a movie's box set between the trailers and More Like This, and its collections
+# row below the box set; a series has its collections row right below Cast & Crew.
+ZONES = ("synopsis", "buttons", "seasons", "episodes", "cast", "extras", "boxset", "collections", "similar", "facts")
+SERIES_ZONES = ("synopsis", "buttons", "seasons", "episodes", "cast", "collections", "extras", "boxset", "similar",
+                "facts")
 ZONE_CONTROLS = {"synopsis": READ_MORE, "seasons": SEASONS, "episodes": EPISODES, "cast": CAST, "extras": EXTRAS,
-                 "boxset": BOXSET, "similar": SIMILAR, "facts": FACTS}
+                 "boxset": BOXSET, "collections": COLLECTIONS, "similar": SIMILAR, "facts": FACTS}
 
 LEFT = 100
 TEXT_RIGHT = LEFT + 1080
@@ -57,6 +61,7 @@ CAST_HEIGHT = 400
 EXTRAS_HEIGHT = 400
 SIMILAR_HEIGHT = 460
 BOXSET_HEIGHT = 460
+COLLECTIONS_HEIGHT = 460
 MAX_FACTS = 12
 # A scrolled-to section's heading sits this far from the top of the screen.
 SECTION_SCROLL_TOP = 140
@@ -330,6 +335,10 @@ class DetailsWindow(xbmcgui.WindowXML):
         self.box_set = None
         self.box_set_movies = []
         self.box_set_explore = False
+        # The collections row: the collections holding the title and, when only one does,
+        # its other titles shown in place of its card (then Explore all opens it).
+        self.collection_cards = []
+        self.collection_preview = []
         self.extras = []
         self.facts = []
         self.visible_buttons = []
@@ -342,6 +351,7 @@ class DetailsWindow(xbmcgui.WindowXML):
         self.cast_top = SECTIONS_TOP
         self.similar_top = SECTIONS_TOP
         self.boxset_top = SECTIONS_TOP
+        self.collections_top = SECTIONS_TOP
         self.extras_top = SECTIONS_TOP
         self.facts_top = SECTIONS_TOP
         # Server capabilities, read once per page when the More menu needs them.
@@ -377,6 +387,7 @@ class DetailsWindow(xbmcgui.WindowXML):
             # Read more sits above the buttons but is never where the page opens.
             self.focus_zone(next((zone for zone in zones if zone != "synopsis"), zones[0]))
         self.load_box_set()
+        self.load_collections()
         self.load_similar()
 
     def onAction(self, action):
@@ -456,6 +467,8 @@ class DetailsWindow(xbmcgui.WindowXML):
                 self.application.open_item(item)
         elif control_id == BOXSET:
             self.open_box_set_card()
+        elif control_id == COLLECTIONS:
+            self.open_collections_card()
         elif control_id in (WATCHLIST, FAVORITE):
             self.toggle_mark("watchlist" if control_id == WATCHLIST else "favorite")
         elif control_id == MORE:
@@ -924,24 +937,68 @@ class DetailsWindow(xbmcgui.WindowXML):
             if movie.get("content_id") != self.item.get("content_id"):
                 self.application.open_item(movie)
 
+    # ---------------------------------------------------------- collections
+    def load_collections(self):
+        """The collections holding a movie or series (Android TvItemCollectionsRow): one
+        collection's other titles then Explore all, or an "Also in" row of collection cards."""
+        found = None
+        if self.item.get("type") in ("movie", "series") and self.item.get("content_id"):
+            try:
+                found = svc_browse.item_collections(self.application.client, self.item["content_id"])
+            except Exception:  # The row is optional; never let it break the page.
+                found = None
+        cards = (found or {}).get("cards") or []
+        self.collection_cards = cards
+        self.collection_preview = ((found or {}).get("preview") or []) if len(cards) == 1 else []
+        image = self.application.image
+        if self.collection_preview:
+            entries = [card_list_item(item, image) for item in self.collection_preview]
+            explore = xbmcgui.ListItem(label="Explore all", label2=present.count_text(cards[0].get("count")))
+            explore.setProperty("silo.explore", "true")
+            entries.append(explore)
+            title = cards[0]["title"]
+        else:
+            entries = [collection_list_item(card, image) for card in cards]
+            title = "Also in" if cards else ""
+        control = self.getControl(COLLECTIONS)
+        control.reset()
+        control.addItems(entries)
+        if entries:
+            control.selectItem(0)
+        self.setProperty("silo.collections_title", title)
+        self.setProperty("silo.has_collections", "true" if cards else "")
+        self.layout_sections()
+
+    def open_collections_card(self):
+        position = self.getControl(COLLECTIONS).getSelectedPosition()
+        if self.collection_preview:
+            if 0 <= position < len(self.collection_preview):
+                self.application.open_item(self.collection_preview[position])
+            elif position == len(self.collection_preview):
+                self.application.open_screen("collection", collection=self.collection_cards[0])
+        elif 0 <= position < len(self.collection_cards):
+            self.application.open_screen("collection", collection=self.collection_cards[position])
+
     def layout_sections(self):
-        """Stack the sections below the rail: cast, trailers, box set, related, details."""
+        """Stack the sections below the rail in zone order: cast, trailers, box set, collections
+        (right below the cast on a series), related, then details."""
         has_rail = bool(self.seasons or self.episodes)
         top = SECTIONS_TOP_SERIES if has_rail else SECTIONS_TOP
-        self.cast_top = top
-        top += CAST_HEIGHT if self.cast else 0
-        self.extras_top = top
-        top += EXTRAS_HEIGHT if self.extras else 0
-        self.boxset_top = top
-        top += BOXSET_HEIGHT if self.box_set_movies else 0
-        self.similar_top = top
-        top += SIMILAR_HEIGHT if self.similar else 0
-        self.facts_top = top
-        self.getControl(CAST_GROUP).setPosition(0, self.cast_top)
-        self.getControl(EXTRAS_GROUP).setPosition(0, self.extras_top)
-        self.getControl(BOXSET_GROUP).setPosition(0, self.boxset_top)
-        self.getControl(SIMILAR_GROUP).setPosition(0, self.similar_top)
-        self.getControl(FACTS_GROUP).setPosition(0, self.facts_top)
+        heights = {"cast": CAST_HEIGHT if self.cast else 0, "extras": EXTRAS_HEIGHT if self.extras else 0,
+                   "boxset": BOXSET_HEIGHT if self.box_set_movies else 0,
+                   "collections": COLLECTIONS_HEIGHT if self.collection_cards else 0,
+                   "similar": SIMILAR_HEIGHT if self.similar else 0}
+        tops = {}
+        for zone in self.zone_order():
+            if zone in heights:
+                tops[zone] = top
+                top += heights[zone]
+        self.cast_top, self.extras_top, self.boxset_top = tops["cast"], tops["extras"], tops["boxset"]
+        self.collections_top, self.similar_top, self.facts_top = tops["collections"], tops["similar"], top
+        for group, group_top in ((CAST_GROUP, self.cast_top), (EXTRAS_GROUP, self.extras_top),
+                                 (BOXSET_GROUP, self.boxset_top), (COLLECTIONS_GROUP, self.collections_top),
+                                 (SIMILAR_GROUP, self.similar_top), (FACTS_GROUP, self.facts_top)):
+            self.getControl(group).setPosition(0, group_top)
 
     # ----------------------------------------------------- trailers & extras
     def youtube_available(self):
@@ -1179,10 +1236,14 @@ class DetailsWindow(xbmcgui.WindowXML):
             "cast": bool(self.cast),
             "extras": bool(self.extras),
             "boxset": bool(self.box_set_movies),
+            "collections": bool(self.collection_cards),
             "similar": bool(self.similar),
             "facts": bool(self.facts),
         }
-        return [zone for zone in ZONES if present_zones[zone]]
+        return [zone for zone in self.zone_order() if present_zones[zone]]
+
+    def zone_order(self):
+        return SERIES_ZONES if self.item.get("type") == "series" else ZONES
 
     def move_zone(self, step):
         zones = self.available_zones()
@@ -1213,7 +1274,7 @@ class DetailsWindow(xbmcgui.WindowXML):
 
     def scroll_to(self, zone):
         tops = {"cast": self.cast_top, "extras": self.extras_top, "boxset": self.boxset_top,
-                "similar": self.similar_top, "facts": self.facts_top}
+                "collections": self.collections_top, "similar": self.similar_top, "facts": self.facts_top}
         offset = max(0, tops[zone] - SECTION_SCROLL_TOP) if zone in tops else 0
         if offset != self.scroll_offset:
             self.scroll_offset = offset

@@ -4,7 +4,8 @@ Routes are Silo /api/v2: GET /recommendations/discover, GET /calendar,
 GET /collections, GET /library/{id}/collections, GET /library/{id}/collections/{cid}/items,
 the ``collections`` of a GET /home/sections row of collections,
 GET /library/{id}/sections (+ /sections/{sid}/items), GET /catalog/people/{id},
-GET /catalog (source=person | user_collection) and POST /history/remove.
+GET /catalog (source=person | user_collection), GET /catalog/items/{id}/collections
+(when GET /catalog/search/capabilities says item_collections) and POST /history/remove.
 Every reader tolerates missing fields and wrong types and returns plain dicts.
 """
 
@@ -191,6 +192,24 @@ def section_collections(section):
         if card and (card["kind"] == "personal" or card["library_id"]):
             cards.append(dict(card, type=present.COLLECTION))
     return cards
+
+
+# Titles a single collection's preview shows on a title page, as Android and web do.
+ITEM_COLLECTION_PREVIEW = 6
+
+
+def item_collections(client, content_id):
+    """The collections a movie's or series' page lists, or None when the server has no such read.
+
+    {"cards": the collections holding the title, as section_collections makes them,
+    "preview": when only one collection does, up to six of its other titles, else []}.
+    Only a server whose search capabilities say item_collections is asked.
+    """
+    if _get(client, "/catalog/search/capabilities").get("item_collections") is not True:
+        return None
+    response = _get(client, "/catalog/items/{}/collections".format(_id(content_id)))
+    return {"cards": section_collections({"collections": response.get("items")}),
+            "preview": present.video_items(_list(response.get("preview_items")))[:ITEM_COLLECTION_PREVIEW]}
 
 
 def libraries_collections(client, libraries):

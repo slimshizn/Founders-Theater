@@ -25,6 +25,7 @@
 - Search with people, and person pages with their filmography. On Kodi 20 or later for Android or macOS, Kodi's keyboard takes speech: hold OK (Return on a Mac) and speak. The search heading says so where it works.
 - Movie box sets, where the server has them on: a box set row on a movie's page, a box set page with Play on the next film, and box sets leading search.
 - Title pages with seasons and episodes, cast, trailers and extras, related titles and the full synopsis.
+- On a movie or series page, the collections holding it: one collection's other titles with Explore all, or an Also in row when several hold it.
 - Rate movies and series from 1 to 5 stars from the title page's More menu.
 
 **Watch**

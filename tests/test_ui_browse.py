@@ -665,6 +665,30 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(svc_browse.section_collections({"collections": "x"}), [])
         self.assertEqual(svc_browse.section_collections(None), [])
 
+    def test_a_titles_collections_need_the_capability(self):
+        client = FakeClient({"/catalog/search/capabilities": {"provider": "postgres"}})
+        self.assertIsNone(svc_browse.item_collections(client, "movie:1"))
+        self.assertEqual(client.paths(), ["/catalog/search/capabilities"])
+
+    def test_a_titles_collections_become_cards_and_a_preview(self):
+        client = FakeClient({
+            "/catalog/search/capabilities": {"item_collections": True},
+            "/catalog/items/movie%3A1/collections": {
+                "items": [{"id": "k1", "source": "library", "title": "Example Franchise", "item_count": 8,
+                           "library_id": "2"},
+                          {"id": "u1", "source": "user", "title": "Example Mine", "item_count": 3,
+                           "creator_profile_id": "p1"},
+                          {"id": "k2", "source": "library", "title": "Names no library"}],
+                "preview_items": [movie(index) for index in range(1, 9)] + [{"type": "book", "content_id": "b"}]}})
+        found = svc_browse.item_collections(client, "movie:1")
+        self.assertEqual([(card["id"], card["kind"], card["type"]) for card in found["cards"]],
+                         [("k1", "library", "collection"), ("u1", "personal", "collection")])
+        self.assertEqual([item["content_id"] for item in found["preview"]],
+                         [movie(index)["content_id"] for index in range(1, 7)])  # Six, as Android shows.
+        empty = FakeClient({"/catalog/search/capabilities": {"item_collections": True},
+                            "/catalog/items/series%3A1/collections": {"items": None}})
+        self.assertEqual(svc_browse.item_collections(empty, "series:1"), {"cards": [], "preview": []})
+
     def test_page_cursor_only_when_more(self):
         client = FakeClient({"/catalog": {"items": [movie(1)], "page": {"has_more": False, "next_cursor": "x"},
                                           "total": "3"}})
