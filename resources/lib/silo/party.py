@@ -50,6 +50,8 @@ class RoomSession:
         self._lock = threading.RLock()
         self._changed = threading.Condition(self._lock)
         self._snapshot = dict(room)
+        self._suggestions = []     # In the order they were made.
+        self._my_votes = set()     # Suggestion ids this viewer voted for (socket lists never say).
         self._commands = []
         self._socket = None
         self._stop = threading.Event()
@@ -96,6 +98,41 @@ class RoomSession:
                 self.token = token
             if isinstance(room, dict) and room and self._generation(room) > self._generation(self._snapshot):
                 self._snapshot = dict(room)
+            self._changed.notify_all()
+
+    # ------------------------------------------------------------ suggestions
+    def suggestion_list(self):
+        """The room's suggestions, most votes first (ties in the order they were made), each
+        with ``voted_by_me`` for this viewer."""
+        with self._lock:
+            entries = [dict(entry, voted_by_me=entry["id"] in self._my_votes) for entry in self._suggestions]
+        return sorted(entries, key=lambda entry: -entry["vote_count"])
+
+    def note_vote(self, suggestion_id, on):
+        """Remember this viewer's vote once the server has taken it."""
+        with self._changed:
+            (self._my_votes.add if on else self._my_votes.discard)(str(suggestion_id))
+            self._changed.notify_all()
+
+    def load_suggestions(self):
+        """Read the suggestions over HTTP, the one answer that says which are this viewer's votes."""
+        entries = svc_party.suggestions(self.client, self.room_id, self.token)
+        self._take_suggestions(entries, votes=True)
+
+    def _take_suggestions(self, entries, votes=False):
+        cleaned = []
+        for entry in entries or ():
+            if not isinstance(entry, dict) or entry.get("id") in (None, ""):
+                continue
+            count = entry.get("vote_count")
+            cleaned.append(dict(entry, id=str(entry["id"]),
+                                vote_count=count if isinstance(count, int) and not isinstance(count, bool) else 0))
+        with self._changed:
+            self._suggestions = cleaned
+            if votes:
+                self._my_votes = {entry["id"] for entry in cleaned if entry.get("voted_by_me") is True}
+            else:
+                self._my_votes &= {entry["id"] for entry in cleaned}
             self._changed.notify_all()
 
     @staticmethod
@@ -192,6 +229,10 @@ class RoomSession:
                     self._changed.notify_all()
                 opened_at = self.mono()
                 self.log("party_connected")
+                try:
+                    self.load_suggestions()
+                except (ApiError, OSError, ValueError):
+                    self.log("party_suggestions_failed")  # The socket's next list still arrives.
                 while not self._stop.is_set():
                     self._dispatch(sock.recv())
             except wsclient.Closed as closed:
@@ -232,6 +273,8 @@ class RoomSession:
                 if self._generation(frame["room"]) >= self._generation(self._snapshot):
                     self._snapshot = dict(frame["room"])
                 self._changed.notify_all()
+        elif kind == "suggestions_update" and isinstance(frame.get("suggestions"), list):
+            self._take_suggestions(frame["suggestions"])
         elif kind == "transport_command" and isinstance(frame.get("command"), dict):
             with self._changed:
                 self._commands.append(dict(frame["command"]))

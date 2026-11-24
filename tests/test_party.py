@@ -42,12 +42,15 @@ class FakeSocket:
 class FakeClient:
     server_url = "https://silo.example"
 
-    def __init__(self, tickets=None):
+    def __init__(self, tickets=None, suggestions=None):
         self.tickets = list(tickets or [])
+        self.suggestions = list(suggestions or [])
         self.calls = []
 
     def request(self, method, path, body=None, params=None, headers=None):
         self.calls.append((method, path, headers))
+        if path.endswith("/suggestions"):
+            return {"items": [dict(entry) for entry in self.suggestions], "page": {"has_more": False}}
         if path.endswith("/ws-ticket"):
             answer = self.tickets.pop(0) if self.tickets else {"ticket": "t-more"}
             if isinstance(answer, Exception):
@@ -68,8 +71,8 @@ def wait_for(condition, timeout=3.0):
 
 
 class RoomSessionTests(unittest.TestCase):
-    def open(self, *sockets, tickets=None):
-        self.client = FakeClient(tickets or [{"ticket": "t1"}, {"ticket": "t2"}, {"ticket": "t3"}])
+    def open(self, *sockets, tickets=None, suggestions=None):
+        self.client = FakeClient(tickets or [{"ticket": "t1"}, {"ticket": "t2"}, {"ticket": "t3"}], suggestions)
         self.sockets = list(sockets)
         self.connects = []
 
@@ -152,6 +155,29 @@ class RoomSessionTests(unittest.TestCase):
         self.assertEqual(self.connects[0][1][1], "silo.ticket.t9")
         ended = self.open(tickets=[ApiError(409, "Room closed", "conflict")])
         self.assertTrue(wait_for(lambda: ended.ended == "ended"))
+
+    def test_suggestions_load_on_connect_and_follow_the_socket_keeping_this_viewers_votes(self):
+        made = {"room_id": "r1", "content_type": "movie", "subtitle": "", "poster_url": "", "note": ""}
+        loaded = [dict(made, id="s1", title="First", vote_count=1, voted_by_me=False),
+                  dict(made, id="s2", title="Second", vote_count=1, voted_by_me=True)]
+        sock = FakeSocket({"type": "snapshot", "room": ROOM})
+        session = self.open(sock, suggestions=loaded)
+        self.assertTrue(wait_for(lambda: len(session.suggestion_list()) == 2))
+        self.assertEqual([(entry["id"], entry["voted_by_me"]) for entry in session.suggestion_list()],
+                         [("s1", False), ("s2", True)])  # Equal votes keep the order they were made in.
+        self.assertTrue(any(call[1].endswith("/suggestions") and call[2] == {"X-Room-Token": "eyJ.proof"}
+                            for call in self.client.calls))
+        # The socket's list says voted_by_me false for everyone; this viewer's own votes stay.
+        sock.feed({"type": "suggestions_update", "suggestions": [
+            dict(made, id=7, title="Third", vote_count=0, voted_by_me=False, suggester_user_id=3),
+            dict(made, id="s1", title="First", vote_count=2, voted_by_me=False),
+            dict(made, id="s2", title="Second", vote_count=1, voted_by_me=False)]})
+        self.assertTrue(wait_for(lambda: len(session.suggestion_list()) == 3))
+        self.assertEqual([(entry["id"], entry["voted_by_me"]) for entry in session.suggestion_list()],
+                         [("s1", False), ("s2", True), ("7", False)])  # Most votes first.
+        session.note_vote("s1", True)
+        session.note_vote("s2", False)
+        self.assertEqual([entry["voted_by_me"] for entry in session.suggestion_list()], [True, False, False])
 
     def test_send_needs_a_connection_and_leave_closes_it(self):
         sock = FakeSocket({"type": "snapshot", "room": ROOM})
