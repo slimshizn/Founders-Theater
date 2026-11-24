@@ -332,6 +332,8 @@ class DetailsWindow(xbmcgui.WindowXML):
         self.season_index = 0
         self.episodes = []
         self.episode_cache = {}
+        # The rail's selection after the last move, to tell a press at its end from a move onto it.
+        self.rail_position = None
         self.cast = []
         self.similar = []
         # The box set row: the box set, its movies in release order, and whether Explore all ends it.
@@ -407,7 +409,7 @@ class DetailsWindow(xbmcgui.WindowXML):
             focused = self.focused()
             if focused == SEASONS:
                 self.season_settle.trigger()
-            elif focused == EPISODES:
+            elif focused == EPISODES and not self.cross_season(action_id):
                 self.show_focused_episode()
 
     def onFocus(self, control_id):
@@ -906,18 +908,45 @@ class DetailsWindow(xbmcgui.WindowXML):
             self.season_index = position
             self.show_season(position)
 
-    def show_season(self, index):
+    def season_episodes(self, index):
+        """A season's episodes, read once; a failed read is not kept."""
         season = self.seasons[index]
         key = season.get("content_id")
         episodes = self.episode_cache.get(key)
         if episodes is None:
             episodes = self.application.guard(lambda: self.application.episodes(season))
             if not isinstance(episodes, list):
-                episodes = []
-            else:
-                self.episode_cache[key] = episodes
+                return []
+            self.episode_cache[key] = episodes
+        return episodes
+
+    def show_season(self, index):
+        episodes = self.season_episodes(index)
         if index == self.season_index:
             self.set_episodes(episodes)
+
+    def cross_season(self, action_id):
+        """Right on a season's last episode moves on to the next season's first, and Left on its
+        first back to the previous season's last, passing over empty seasons (Android's episode
+        carousel). Kodi has already moved the selection, so only a press that did not move it
+        counts as one at the end. True when the rail crossed."""
+        position = self.getControl(EPISODES).getSelectedPosition()
+        moved, self.rail_position = position != self.rail_position, position
+        step = 1 if action_id == ACTION_RIGHT else -1
+        if moved or not self.seasons or position != (len(self.episodes) - 1 if step > 0 else 0):
+            return False
+        index = self.season_index + step
+        while 0 <= index < len(self.seasons):
+            episodes = self.season_episodes(index)
+            if episodes:
+                break
+            index += step
+        else:
+            return False
+        self.season_index = index
+        self.getControl(SEASONS).selectItem(index)
+        self.set_episodes(episodes, select=0 if step > 0 else len(episodes) - 1)
+        return True
 
     def reload_episodes(self):
         """Progress changed after playback; fetch the shown season again."""
@@ -925,7 +954,8 @@ class DetailsWindow(xbmcgui.WindowXML):
             self.episode_cache.pop(self.seasons[self.season_index].get("content_id"), None)
             self.show_season(self.season_index)
 
-    def set_episodes(self, episodes):
+    def set_episodes(self, episodes, select=None):
+        """Show a season's episodes, selecting ``select`` or else the next-up episode."""
         self.episodes = [episode for episode in episodes if isinstance(episode, dict)]
         control = self.getControl(EPISODES)
         control.reset()
@@ -944,8 +974,11 @@ class DetailsWindow(xbmcgui.WindowXML):
         play_id = self.item.get("play_content_id")
         position = next((index for index, episode in enumerate(self.episodes)
                          if play_id and episode.get("content_id") == play_id), 0)
+        if select is not None and 0 <= select < len(self.episodes):
+            position = select
         if self.episodes:
             control.selectItem(position)
+        self.rail_position = position if self.episodes else None
         self.setProperty("silo.has_episodes", "true" if self.episodes else "")
         if self.hero_episode is not None:
             self.hero_episode = None

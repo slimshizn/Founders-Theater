@@ -1083,6 +1083,63 @@ class NextUpControlsTests(unittest.TestCase):
                 self.app.play_next.assert_called_once_with(window.item)
 
 
+class EpisodeRailTests(unittest.TestCase):
+    """The episode row runs on into the next and previous season (Android's episode carousel)."""
+
+    setUp = DetailsWindowTests.setUp
+    window = DetailsWindowTests.window
+
+    def open(self, **extra):
+        window = self.window(series_item(**extra), SEASONS)
+        rail = window.getControl(ui_details.EPISODES)
+        selection = {"position": 0}
+        rail.getSelectedPosition.side_effect = lambda: selection["position"]
+        rail.selectItem.side_effect = lambda index: selection.__setitem__("position", index)
+        window.onInit()
+        window.focus_id = ui_details.EPISODES
+        return window, selection
+
+    def press(self, window, selection, action, position=None):
+        if position is not None:
+            selection["position"] = position  # Kodi has already moved the selection.
+        window.onAction(Action(action))
+
+    def test_right_past_a_seasons_last_episode_opens_the_next_seasons_first(self):
+        window, selection = self.open()
+        self.assertEqual((window.season_index, selection["position"]), (0, 1))  # Next up: S1 E2.
+        self.press(window, selection, RIGHT, 2)  # Onto the last episode: still season 1.
+        self.assertEqual(window.season_index, 0)
+        self.press(window, selection, RIGHT)  # Right again at the end.
+        self.assertEqual(window.season_index, 1)
+        window.getControl(ui_details.SEASONS).selectItem.assert_called_with(1)
+        self.assertEqual(selection["position"], 0)
+        self.assertEqual(window.episodes[0]["content_id"], "episode:2-1")
+        self.assertEqual(window.properties["silo.title"], "CHAPTER 1")
+
+    def test_left_past_a_seasons_first_episode_opens_the_previous_seasons_last(self):
+        window, selection = self.open(play_season_number=2, play_content_id="episode:2-1")
+        self.assertEqual((window.season_index, selection["position"]), (1, 0))
+        self.press(window, selection, LEFT)
+        self.assertEqual(window.season_index, 0)
+        self.assertEqual(selection["position"], 2)
+        self.assertEqual(window.episodes[2]["content_id"], "episode:1-3")
+
+    def test_the_row_stops_at_the_ends_and_passes_over_empty_seasons(self):
+        window, selection = self.open()
+        self.press(window, selection, LEFT, 0)  # Onto the first episode of the first season.
+        self.press(window, selection, LEFT)
+        self.assertEqual(window.season_index, 0)
+        self.app.episodes.side_effect = lambda season: [] if season["season_number"] == 2 else episodes_for(season)
+        window.episode_cache.clear()
+        self.press(window, selection, RIGHT, 2)
+        self.press(window, selection, RIGHT)
+        self.assertEqual(window.season_index, 2)  # Season 2 is empty; Specials come next.
+        self.assertEqual(window.episodes[0]["content_id"], "episode:0-1")
+        self.press(window, selection, RIGHT, 2)
+        self.press(window, selection, RIGHT)
+        self.assertEqual(window.season_index, 2)  # Specials are the last capsule.
+
+
 class CardMenuTests(unittest.TestCase):
     """Long-press on an episode card or a box set page's movie (Android TvMediaCardContextMenu)."""
 
