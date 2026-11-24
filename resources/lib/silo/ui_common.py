@@ -4,7 +4,7 @@ import threading
 
 import xbmcgui
 
-from . import present, svc_boxsets
+from . import kodi_settings, present, svc_boxsets
 
 BACK_ACTIONS = frozenset({9, 10, 92, 216, 247, 257, 61448})
 ACTION_LEFT, ACTION_RIGHT, ACTION_UP, ACTION_DOWN = 1, 2, 3, 4
@@ -44,6 +44,37 @@ class Debouncer:
             if self._timer is not None:
                 self._timer.cancel()
                 self._timer = None
+
+
+def voice_hint(condition=None, build=None, setting=None):
+    """How to start speech in Kodi's keyboard on this device, or "" where it has none.
+
+    Kodi 20+ takes speech in its own keyboard on Android and macOS (xbmc PRs 21330
+    and 21384), started by a long press of Enter or Return, Menu, Play/Pause or the
+    search key. No add-on API starts it, so the search headings say which key does.
+    iOS shows the system keyboard; tvOS, Windows and Linux have no speech.
+    """
+    try:
+        if condition is None or build is None:
+            import xbmc
+
+            condition = condition or xbmc.getCondVisibility
+            build = xbmc.getInfoLabel("System.BuildVersion") if build is None else build
+        if int(str(build).split(".")[0]) < 20:
+            return ""
+        if condition("System.Platform.Android"):
+            # Kodi 23 shows Android's own keyboard unless "Use Kodi virtual keyboard" is on.
+            kodi_keyboard = (setting or kodi_settings.get_bool)(kodi_settings.APPLICATION_KEYBOARD)
+            return "" if kodi_keyboard is False else "hold OK to speak"
+        return "hold Return to speak" if condition("System.Platform.OSX") else ""
+    except (ImportError, AttributeError, RuntimeError, TypeError, ValueError):
+        return ""
+
+
+def search_heading(text, note=""):
+    """A keyboard heading with its note and, where Kodi takes speech, how to start it."""
+    notes = [part for part in (note, voice_hint()) if part]
+    return "{} ({})".format(text, "; ".join(notes)) if notes else text
 
 
 def set_properties(window, values):

@@ -8,7 +8,7 @@ import xbmcgui
 
 from . import present, svc_boxsets, svc_personal
 from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_MOUSE_MOVE, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, Debouncer,
-                        box_set_list_item, card_list_item, collection_list_item, set_properties)
+                        box_set_list_item, card_list_item, collection_list_item, search_heading, set_properties)
 
 # Control ids; scripts/skin_home.py writes the matching SiloHome.xml.
 TOP_BAR, TAB_CLUSTER, SEARCH_BUTTON, AVATAR = 200, 202, 201, 230
@@ -931,7 +931,7 @@ class HomeWindow(xbmcgui.WindowXML):
             chosen = {values[choice - 1][0]} if choice else set()
         else:
             if facet in SEARCHABLE_FACETS and len(values) > FACET_SEARCH_MIN:
-                text = (dialog.input("Search {} (leave empty for all)".format(label.lower())) or "").strip()
+                text = (dialog.input(search_heading("Search " + label.lower(), "leave empty for all")) or "").strip()
                 if text:
                     values = self.search_facet(facet, text, current)
             if not values:
@@ -1108,7 +1108,7 @@ class HomeWindow(xbmcgui.WindowXML):
         self.run_search()
 
     def edit_query(self):
-        text = (self.application.dialog.input("Search", self.query) or "").strip()
+        text = (self.application.dialog.input(search_heading("Search"), self.query) or "").strip()
         if not text:
             return
         self.query = text

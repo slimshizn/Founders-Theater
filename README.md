@@ -22,7 +22,7 @@
 - Movies and Series grids with library, sort in either direction, filters and an A–Z jump, plus each library's Recommended rows and Collections.
 - Rest on Movies, Series or For You for a menu: pick a library, then Recommended, Browse or Collections; or Recommendations, Favorites, Watchlist and History.
 - For You, Calendar, Watchlist, Favorites, History, and Requests when your server offers them.
-- Search with people, and person pages with their filmography.
+- Search with people, and person pages with their filmography. On Kodi 20 or later for Android or macOS, Kodi's keyboard takes speech: hold OK (Return on a Mac) and speak. The search heading says so where it works.
 - Movie box sets, where the server has them on: a box set row on a movie's page, a box set page with Play on the next film, and box sets leading search.
 - Title pages with seasons and episodes, cast, trailers and extras, related titles and the full synopsis.
 - Rate movies and series from 1 to 5 stars from the title page's More menu.

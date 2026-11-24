@@ -68,6 +68,7 @@ KODI_MODULES = {
 with patch.dict(sys.modules, KODI_MODULES):
     sys.modules.pop("resources.lib.silo.ui_requests", None)
     ui_requests = importlib.import_module("resources.lib.silo.ui_requests")
+    ui_common = importlib.import_module("resources.lib.silo.ui_common")
 svc = importlib.import_module("resources.lib.silo.svc_requests")
 
 
@@ -361,6 +362,14 @@ class HubTests(unittest.TestCase):
         self.assertEqual(window.properties["silo.query"], "example")
         self.assertEqual(window.focus, 3002)
         self.assertEqual(len(window.getControl(3002).addItems.call_args.args[0]), 2)
+
+    def test_search_heading_says_how_to_speak(self):
+        window = open_hub(make_application(FakeClient()))
+        window.application.dialog.input.return_value = ""
+        with patch.object(ui_common, "voice_hint", return_value="hold OK to speak"):
+            window.onClick(ui_requests.SEARCH_BUTTON)
+        self.assertEqual(window.application.dialog.input.call_args.args[0],
+                         "Search movies and series (hold OK to speak)")
 
     def test_search_without_results_says_so(self):
         client = FakeClient({("GET", "/requests/search"): {"results": []}})

@@ -52,6 +52,14 @@ class KodiSettingsTests(unittest.TestCase):
         self.assertIsNone(kodi_settings.get(kodi_settings.FRAME_RATE,
                                             lambda raw: json.dumps({"result": {"value": True}})))
 
+    def test_get_bool_reads_on_off_settings_only(self):
+        rpc = FakeRpc({kodi_settings.APPLICATION_KEYBOARD: True, kodi_settings.FRAME_RATE: 0})
+        self.assertIs(kodi_settings.get_bool(kodi_settings.APPLICATION_KEYBOARD, rpc), True)
+        self.assertIs(kodi_settings.get_bool(kodi_settings.APPLICATION_KEYBOARD,
+                                             FakeRpc({kodi_settings.APPLICATION_KEYBOARD: False})), False)
+        self.assertIsNone(kodi_settings.get_bool(kodi_settings.FRAME_RATE, rpc))
+        self.assertIsNone(kodi_settings.get_bool("input.unknown", rpc))
+
     def test_labels(self):
         self.assertEqual(kodi_settings.label(kodi_settings.FRAME_RATE_CHOICES, 2), "On start and stop")
         self.assertEqual(kodi_settings.label(kodi_settings.FRAME_RATE_CHOICES, None), "Off")

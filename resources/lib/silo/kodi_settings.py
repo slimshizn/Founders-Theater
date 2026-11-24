@@ -13,6 +13,8 @@ FRAME_RATE_CHOICES = ((0, "Off"), (2, "On start and stop"), (3, "On start"), (1,
 # Tenths of a second Kodi pauses after switching, so the TV can settle.
 FRAME_RATE_PAUSE = "videoplayer.pauseafterrefreshchange"
 FRAME_RATE_PAUSE_CHOICES = ((0, "Off"), (10, "1 second"), (20, "2 seconds"), (30, "3 seconds"), (50, "5 seconds"))
+# Kodi 23 on Android and tvOS: "Use Kodi virtual keyboard" (off shows the system keyboard instead).
+APPLICATION_KEYBOARD = "input.useapplicationkeyboard"
 
 
 def _rpc(method, params, execute=None):
@@ -32,6 +34,13 @@ def get(setting, execute=None):
     answer = _rpc("Settings.GetSettingValue", {"setting": setting}, execute)
     value = ((answer or {}).get("result") or {}).get("value")
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def get_bool(setting, execute=None):
+    """An on/off setting's value, or None when Kodi does not have it."""
+    answer = _rpc("Settings.GetSettingValue", {"setting": setting}, execute)
+    value = ((answer or {}).get("result") or {}).get("value")
+    return value if isinstance(value, bool) else None
 
 
 def set_value(setting, value, execute=None):

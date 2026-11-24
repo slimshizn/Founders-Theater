@@ -51,6 +51,7 @@ KODI_MODULES = {
 with patch.dict(sys.modules, KODI_MODULES):
     sys.modules.pop("resources.lib.silo.ui_home", None)
     ui_home = importlib.import_module("resources.lib.silo.ui_home")
+    ui_common = importlib.import_module("resources.lib.silo.ui_common")
 
 
 class Action:
@@ -467,6 +468,69 @@ class LibraryTests(unittest.TestCase):
         window.onClick(ui_home.GRID)
         window.application.open_item.assert_called_once_with(window.grid_items[2])
         self.assertEqual(window.focus, ui_home.GRID)
+
+
+class VoiceHintTests(unittest.TestCase):
+    """Kodi 20+ takes speech in its own keyboard on Android and macOS; the heading says how."""
+
+    KODI_21 = "21.2 (21.2.0) Git:20250213-example"
+
+    def hint(self, platform, build=KODI_21, keyboard=None):
+        return ui_common.voice_hint(condition=lambda name: name == platform, build=build,
+                                    setting=lambda name: keyboard if name == "input.useapplicationkeyboard" else None)
+
+    def test_android_and_macos_say_which_key_starts_speech(self):
+        self.assertEqual(self.hint("System.Platform.Android"), "hold OK to speak")
+        self.assertEqual(self.hint("System.Platform.OSX"), "hold Return to speak")
+
+    def test_kodi_23_on_android_hints_only_with_kodis_own_keyboard(self):
+        self.assertEqual(self.hint("System.Platform.Android", "23.0-ALPHA1 (22.90.101) Git:x", keyboard=True),
+                         "hold OK to speak")
+        self.assertEqual(self.hint("System.Platform.Android", "23.0-ALPHA1 (22.90.101) Git:x", keyboard=False), "")
+
+    def test_no_hint_where_kodi_has_no_speech(self):
+        for platform in ("System.Platform.Linux", "System.Platform.Windows", "System.Platform.IOS",
+                         "System.Platform.TVOS"):
+            with self.subTest(platform=platform):
+                self.assertEqual(self.hint(platform), "")
+        self.assertEqual(self.hint("System.Platform.Android", "19.5 (19.5.0) Git:x"), "")
+        self.assertEqual(self.hint("System.Platform.Android", ""), "")
+
+    def test_no_hint_when_kodi_cannot_be_asked(self):
+        with patch.dict(sys.modules, {"xbmc": types.SimpleNamespace()}):  # No getCondVisibility.
+            self.assertEqual(ui_common.voice_hint(), "")
+
+    def test_headings_carry_the_hint_after_any_note(self):
+        with patch.object(ui_common, "voice_hint", return_value="hold OK to speak"):
+            self.assertEqual(ui_common.search_heading("Search"), "Search (hold OK to speak)")
+            self.assertEqual(ui_common.search_heading("Search studios", "leave empty for all"),
+                             "Search studios (leave empty for all; hold OK to speak)")
+        with patch.object(ui_common, "voice_hint", return_value=""):
+            self.assertEqual(ui_common.search_heading("Search"), "Search")
+            self.assertEqual(ui_common.search_heading("Search studios", "leave empty for all"),
+                             "Search studios (leave empty for all)")
+
+    def test_home_search_and_long_filter_lists_show_the_hint(self):
+        window = open_window()
+        window.onClick(ui_home.SEARCH_BUTTON)
+        window.application.dialog.input.return_value = ""
+        with patch.object(ui_common, "voice_hint", return_value="hold OK to speak"):
+            window.onClick(ui_home.SEARCH_FIELD)
+        self.assertEqual(window.application.dialog.input.call_args.args[0], "Search (hold OK to speak)")
+
+        studios = ["Example Studio {}".format(index) for index in range(70)]
+        window = open_window()
+        request, _calls = routes({("GET", "/catalog/filters"): dict(FILTERS, studios=studios)})
+        window.application.client.request.side_effect = request
+        window.application.browse.return_value = page(3)
+        window.onClick(211)
+        dialog = window.application.dialog
+        dialog.select.side_effect = [6, -1]  # Studio is listed seventh.
+        dialog.input.return_value = ""
+        dialog.multiselect.return_value = None
+        with patch.object(ui_common, "voice_hint", return_value="hold OK to speak"):
+            window.onClick(ui_home.FILTER_CHIP)
+        self.assertEqual(dialog.input.call_args.args[0], "Search studio (leave empty for all; hold OK to speak)")
 
 
 class SearchTests(unittest.TestCase):

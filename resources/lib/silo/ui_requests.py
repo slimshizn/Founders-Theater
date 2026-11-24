@@ -10,7 +10,8 @@ import xbmcgui
 
 from . import present
 from . import svc_requests as svc
-from .ui_common import ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, Debouncer, set_properties
+from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, Debouncer, search_heading,
+                        set_properties)
 
 ACTION_CONTEXT_MENU = 117
 
@@ -236,7 +237,7 @@ class RequestsWindow(xbmcgui.WindowXMLDialog):
     # ------------------------------------------------------------ search
 
     def edit_query(self):
-        text = (self.application.dialog.input("Search movies and series", self.query) or "").strip()
+        text = (self.application.dialog.input(search_heading("Search movies and series"), self.query) or "").strip()
         if not text:
             return
         response = svc.search(self.application.client, text)
