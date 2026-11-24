@@ -850,6 +850,9 @@ class PlaybackController:
         # the next episode keeps.
         self.transition = None
         self.quality_choice = None
+        # Set by the Watch Party screens: the menu Back opens during a party, returning
+        # "leave" to stop watching or anything else to go back to the video.
+        self.party_menu = None
 
     def _extras(self, player, item, plan, options, file_id, log_event, seek=None, ai_enabled=None):
         """Overlays for this playback, or None where Kodi cannot draw them."""
@@ -954,8 +957,13 @@ class PlaybackController:
             log_event("subtitle_unavailable", error=error if isinstance(error, ApiError) else None)
             return None
 
-    def play(self, item, start_position=None, file_id=None, options=None, exact_start=False, transition=None):
+    def play(self, item, start_position=None, file_id=None, options=None, exact_start=False, transition=None,
+             party=None):
         """Play ``item``; ``start_position`` is source seconds (None = server resume).
+
+        ``party`` is a Watch Party binding (party_sync.RoomPlayback): the playback session
+        is attached to the room, the player waits paused for the room's commands, Up next
+        is off, and Back opens ``party_menu`` instead of stopping.
 
         ``transition`` is the Play next card still covering the screen; it
         closes once this episode starts, and Back on it cancels the start.
@@ -972,6 +980,8 @@ class PlaybackController:
         from .settings import read_options
 
         options = dict(read_options(self.addon) if options is None else options)
+        if party is not None:
+            options.update(auto_next=False, party=True)
         self.last_result = None
         self.last_reporter = None
         self.loaded_subtitle = None
@@ -1432,6 +1442,38 @@ class PlaybackController:
             else:
                 player.seekTime(target)
 
+        def follow_party(binding, sample, stalled):
+            """Apply the room's answer to this tick; the reason to stop, or None."""
+            position, paused, offset = sample
+            for action in binding.tick(position + offset, paused, stalled):
+                kind = action[0]
+                if kind == "pause" and not player.paused:
+                    player.pause()
+                elif kind == "play" and player.paused:
+                    player.pause()
+                elif kind == "seek":
+                    caching_since["seek"] = time.monotonic() + 10
+                    extras_seek(max(0.0, action[1] - offset))
+                elif kind == "notify":
+                    notify(action[1])
+                elif kind == "stop":
+                    return action[1]
+            return None
+
+        def open_party_menu(answer):
+            """Run the party menu beside the polling loop, which keeps the room's time."""
+            menu = self.party_menu
+            if not callable(menu):
+                return
+
+            def run():
+                try:
+                    answer.append(menu())
+                except Exception:  # The menu must never end playback by itself.
+                    answer.append(None)
+
+            threading.Thread(target=run, name="silo-party-menu", daemon=True).start()
+
         recovery, previous = StallRecovery(), None
         try:
             version = "".join(char for char in self.addon.getAddonInfo("version") if char in "0123456789.")[:24]
@@ -1460,6 +1502,13 @@ class PlaybackController:
             if not player.finished:
                 extras = self._extras(player, item, session.plan, options, file_id, log_event,
                                       seek=extras_seek, ai_enabled=ai_enabled)
+            party_answer = []  # The party menu's choice, once the viewer has made it.
+            if party is not None and not player.finished:
+                # A member waits, paused, for the room's first command.
+                party.attach(session.session_id)
+                if not player.paused:
+                    player.pause()
+                log_event("party_attached")
             extras_total, extras_total_at = None, 0.0
             revision = player.state_revision
             unavailable_since = None
@@ -1552,10 +1601,22 @@ class PlaybackController:
                         fullscreen_seen, away_since = True, None
                     elif fullscreen_seen:
                         away_since = away_since or now
-                        if now - away_since >= LEFT_FULLSCREEN_SECONDS:
+                        if now - away_since >= LEFT_FULLSCREEN_SECONDS and party is not None:
+                            # A party keeps playing on the room's clock while its menu is open.
+                            fullscreen_seen, away_since = False, None
+                            open_party_menu(party_answer)
+                        elif now - away_since >= LEFT_FULLSCREEN_SECONDS:
                             log_event("left_fullscreen_stop", latest_sample[0])
                             stop_local()
                             break
+                if party_answer and not player.finished:
+                    choice = party_answer.pop()
+                    if choice == "leave":
+                        self.next_action = {"stop": "party", "reason": "left"}
+                        log_event("party_left", latest_sample[0])
+                        stop_local()
+                        break
+                    xbmc.executebuiltin("ActivateWindow(fullscreenvideo)")
                 caching = has_condition("Player.Caching")
                 if caching and not caching_since["was"]:
                     cause = (bq.SEEK if now < caching_since["seek"] else
@@ -1565,6 +1626,14 @@ class PlaybackController:
                     buffering.on_playing()
                 caching_since["was"] = caching
                 buffering.tick()
+                if party is not None and not player.finished:
+                    reason = follow_party(party, latest_sample, caching)
+                    if reason is not None:
+                        self.next_action = {"stop": "party", "reason": reason}
+                        log_event("party_stop_" + "".join(char for char in str(reason) if char.isalnum()
+                                                          or char == "_")[:32], latest_sample[0])
+                        stop_local()
+                        break
                 if recovery.nudges >= recovery.max_nudges:
                     if not recovery.exhausted_reported:
                         recovery.exhausted_reported = True

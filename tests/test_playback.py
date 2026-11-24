@@ -758,10 +758,12 @@ class KodiHarness(unittest.TestCase):
             extras = getattr(self, "fake_extras", None)
             with patch.object(PlaybackController, "_extras",
                               (lambda *args, **kwargs: extras) if extras is not None else PlaybackController._extras):
+                party = getattr(self, "party", None)
                 controller.play({"file_id": "default-file", "title": "A title"},
                                 start_position=start, file_id=file_id,
                                 options=options or {"progress_interval": 10, "subtitle_mode": "server"},
-                                exact_start=getattr(self, "exact_start", False))
+                                exact_start=getattr(self, "exact_start", False),
+                                **({"party": party} if party is not None else {}))
             state.result = controller.last_result
             if controller.last_reporter:
                 self.assertTrue(controller.last_reporter.wait(1), "Reporter did not finish")
@@ -779,6 +781,46 @@ class FullscreenFor:
             return False
         self.checks -= 1
         return self.checks >= 0
+
+
+class FakeParty:
+    """A Watch Party binding (party_sync.RoomPlayback) answering each tick from a script."""
+
+    def __init__(self, script):
+        self.script, self.attached, self.ticks = list(script), [], []
+
+    def attach(self, session_id):
+        self.attached.append(session_id)
+
+    def tick(self, position, paused, stalled=False):
+        self.ticks.append((position, paused, stalled))
+        return self.script.pop(0) if self.script else []
+
+
+class PartyControllerTests(KodiHarness):
+    def test_a_party_member_attaches_waits_paused_and_follows_the_room(self):
+        self.party = FakeParty([[("pause",)], [("seek", 42.0)], [], [("stop", "lobby")]])
+        state = self.run_player(FakeClient(), [(1 + index * 0.25, None) for index in range(20)])
+        self.assertEqual(self.party.attached, ["session/opaque id"])
+        self.assertGreaterEqual(getattr(state, "pauses", 0), 1)  # Paused until the room says play.
+        self.assertIn(42.0, state.seeks)
+        self.assertEqual(state.controller.next_action, {"stop": "party", "reason": "lobby"})
+        self.assertEqual(self.party.ticks[0][2], False)
+        self.assertTrue(any("event=party_stop_lobby" in line for line in state.logs))
+
+    def test_leaving_fullscreen_asks_the_party_menu_instead_of_stopping(self):
+        self.conditions = FullscreenFor(3)
+        asked = []
+
+        def configure(controller, state):
+            controller.party_menu = lambda: asked.append("menu") or "leave"
+
+        self.configure = configure
+        self.party = FakeParty([])
+        state = self.run_player(FakeClient(), [(1 + index * 0.25, None) for index in range(40)])
+        self.assertEqual(asked, ["menu"])
+        self.assertEqual(state.controller.next_action, {"stop": "party", "reason": "left"})
+        self.assertFalse(any("left_fullscreen_stop" in line for line in state.logs))
 
 
 class ControllerTests(KodiHarness):

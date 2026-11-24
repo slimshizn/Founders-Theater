@@ -497,8 +497,9 @@ class PlayerMenuWindow(xbmcgui.WindowXMLDialog):
     # ---------------------------------------------------------------- rows
     def rows_video(self):
         context, rows = self.context, []
+        party = bool(context.get("party"))  # Everyone plays the room's file at normal speed.
         versions = [version for version in context.get("versions") or [] if isinstance(version, dict)]
-        if len(versions) > 1:
+        if len(versions) > 1 and not party:
             current = next((version for version in versions if version.get("file_id") == context.get("file_id")), None)
             rows.append({"key": "version", "label": "Version",
                          "value": _text(current.get("label")) if current else ""})
@@ -506,7 +507,7 @@ class PlayerMenuWindow(xbmcgui.WindowXMLDialog):
         if qualities:
             current = next((label for value, label in qualities if value == self.context.get("quality")), "Auto")
             rows.append({"key": "quality", "label": "Quality", "value": current})
-        if self.menu.speed_supported():
+        if self.menu.speed_supported() and not party:
             rows.append({"key": "speed", "label": "Speed", "value": speed_label(self.menu.speed)})
         ok, result = jsonrpc("Player.GetViewMode")
         mode = result.get("viewmode") if ok and isinstance(result, dict) else None
@@ -516,7 +517,7 @@ class PlayerMenuWindow(xbmcgui.WindowXMLDialog):
                      "value": "{} left".format(sleep_label(minutes)) if minutes else "Off"})
         rows.append({"key": "skip_prompts", "label": "Skip buttons",
                      "value": "On" if context.get("skip_prompts") else "Off"})
-        if context.get("is_episode"):
+        if context.get("is_episode") and not party:
             rows.append({"key": "auto_next", "label": "Auto-play next",
                          "value": "On" if context.get("auto_next") else "Off"})
         return rows

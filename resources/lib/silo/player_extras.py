@@ -190,6 +190,8 @@ def menu_context(item, version, plan, versions, file_id, options, sleep_minutes,
         "qualities": quality_options(plan),
         "quality": quality or "auto",
         "subtitle_tools": True,
+        # A Watch Party plays the room's file at normal speed; the menu offers neither.
+        "party": bool(options.get("party")),
         "ai_translate": bool(ai_translate),
         "subtitle_sync": bool((current_subtitle(plan) or {}).get("sync_key")),
     }
@@ -227,7 +229,8 @@ class PlaybackExtras:
         # The skip label on offer now; Up next carries it while its card shows.
         self.skip_offer = None
         self.next_item = None
-        self.next_state = "pending" if item.get("type") == "episode" else "none"
+        # In a Watch Party the room decides what plays next: no Up next card.
+        self.next_state = "pending" if item.get("type") == "episode" and not self.options.get("party") else "none"
         self.countdown_until = None
         self.sleep_deadline = None
         self.last_menu_refresh = 0.0

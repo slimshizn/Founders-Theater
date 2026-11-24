@@ -474,6 +474,14 @@ class VideoTabTests(MenuTestCase):
         self.assertNotIn("Version", labels)
         self.assertNotIn("Auto-play next", labels)
 
+    def test_a_watch_party_offers_no_version_speed_or_auto_play(self):
+        # Everyone plays the room's file at normal speed, and the room decides what comes next.
+        window = self.open(tab="video", versions=self.VERSIONS, party=True)
+        labels = [label for label, _ in self.rows(window)]
+        for label in ("Version", "Speed", "Auto-play next"):
+            self.assertNotIn(label, labels)
+        self.assertIn("Aspect", labels)
+
     def test_speed_row_hidden_when_jsonrpc_returns_an_error(self):
         KODI.rpc["JSONRPC.Introspect"] = "error"
         window = self.open(tab="video")

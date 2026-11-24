@@ -362,6 +362,12 @@ class StillWatchingAndLeadTests(unittest.TestCase):
         extras.tick(3080, total=3210, now=now)
         extras.tick(3134, total=3210, now=now + 1)
 
+    def test_a_watch_party_never_offers_up_next(self):
+        extras = self.extras(party=True)
+        self.reach_up_next(extras)
+        self.assertEqual(extras.next_state, "none")
+        self.assertIsNone(extras.at_end())
+
     def test_countdown_expiry_counts_an_unattended_episode(self):
         extras = self.extras(still_watching=3)
         self.reach_up_next(extras)
