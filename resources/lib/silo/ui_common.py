@@ -4,9 +4,12 @@ import threading
 
 import xbmcgui
 
-from . import kodi_settings, present, svc_boxsets
+from . import kodi_settings, present, svc_boxsets, svc_personal
 
 BACK_ACTIONS = frozenset({9, 10, 92, 216, 247, 257, 61448})
+# Kodi actions that open a card's context menu: ContextMenu (the Menu key; the default keymap
+# also sends it for a long press of OK), a right click and a long mouse click.
+CONTEXT_ACTIONS = frozenset([117, 101, 108])
 ACTION_LEFT, ACTION_RIGHT, ACTION_UP, ACTION_DOWN = 1, 2, 3, 4
 ACTION_SELECT = 7
 ACTION_MOUSE_MOVE = 107
@@ -75,6 +78,31 @@ def search_heading(text, note=""):
     """A keyboard heading with its note and, where Kodi takes speech, how to start it."""
     notes = [part for part in (note, voice_hint()) if part]
     return "{} ({})".format(text, "; ".join(notes)) if notes else text
+
+
+def card_menu(application, item, kinds=svc_personal.MARK_KINDS, before=(), after=()):
+    """A title card's long-press menu (Android TvMediaCardContextMenu): ``before`` entries, the
+    marks, then ``after``, each (key, label). A mark is applied here, on the server and on the
+    card itself. Returns the chosen key, or None when cancelled or when the change failed."""
+    entries = list(before) + svc_personal.mark_entries(item, kinds) + list(after)
+    choice = application.dialog.contextmenu([label for _key, label in entries])
+    if not isinstance(choice, int) or not 0 <= choice < len(entries):
+        return None
+    key = entries[choice][0]
+    if key in kinds and application.guard(lambda: svc_personal.toggle_mark(application.client, item, key)) is None:
+        return None
+    return key
+
+
+def update_card(control, position, item, image):
+    """Show a card's new watched state and progress in place; its row is not reloaded."""
+    data = present.card(item, image)
+    try:
+        entry = control.getListItem(position)
+        entry.setProperty("silo.watched", "true" if data["watched"] else "")
+        entry.setProperty("silo.progress", str(data["progress"]) if data["progress"] else "")
+    except (RuntimeError, AttributeError):
+        pass
 
 
 def set_properties(window, values):

@@ -456,6 +456,21 @@ class ApplicationFlowTests(unittest.TestCase):
         self.assertIs(player.return_value.play.call_args.args[0], episode)
         self.assertIsNone(self.app.play_next({"content_id": "series:1"}))
 
+    def test_play_card_plays_a_cards_title_at_once_from_its_progress(self):
+        episode = dict(movie_item(), content_id="episode:2", type="episode")
+        self.app.client.item.return_value = episode
+        card = {"content_id": "series:1", "play_content_id": "episode:2", "item_source": "in_progress",
+                "position_seconds": 300, "duration_seconds": 2400}
+        with patch.object(self.app, "play", return_value="file-a") as play:
+            self.assertEqual(self.app.play_card(card), "file-a")
+        self.app.client.item.assert_called_with("episode:2")
+        play.assert_called_once_with(episode, resume=True, fresh=True)
+        # Without progress it plays as Play does: the profile's resume setting decides.
+        with patch.object(self.app, "play", return_value=None) as play:
+            self.app.play_card({"content_id": "movie:1"})
+        self.app.client.item.assert_called_with("movie:1")
+        play.assert_called_once_with(episode, resume=None, fresh=True)
+
     def test_profile_choice_records_avatar_as_png(self):
         self.app.client.profiles.return_value = {"items": [
             {"id": "p", "name": "Example", "avatar_url": "https://avatars.example.invalid/9.x/robot/svg?seed=x"}]}

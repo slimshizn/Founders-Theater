@@ -27,6 +27,39 @@ def set_watched(client, item_id, on):
     return client.request("POST" if on else "DELETE", "/watched/" + _id(item_id))
 
 
+# A card menu's marks in the order every Founders Theater menu lists them, the flag each one
+# keeps in a card's user_state (and user_data), its setter, and its labels when off and on.
+MARK_KINDS = ("watched", "watchlist", "favorite")
+_MARKS = {
+    "watched": ("played", set_watched, ("Mark as watched", "Mark as unwatched")),
+    "watchlist": ("in_watchlist", set_watchlist, ("Add to watchlist", "Remove from watchlist")),
+    "favorite": ("is_favorite", set_favorite, ("Add to favorites", "Remove from favorites")),
+}
+
+
+def mark_entries(item, kinds=MARK_KINDS):
+    """A card menu's mark entries as (kind, label), each naming what choosing it does."""
+    marks = state(item)
+    return [(kind, _MARKS[kind][2][marks[kind]]) for kind in kinds]
+
+
+def set_mark(item, kind, on):
+    """Record a mark on the card itself (user_state, and user_data when the card has it)."""
+    field = _MARKS[kind][0]
+    user_state = item.get("user_state") if isinstance(item.get("user_state"), dict) else {}
+    item["user_state"] = dict(user_state, **{field: on})
+    if isinstance(item.get("user_data"), dict):
+        item["user_data"] = dict(item["user_data"], **{field: on})
+
+
+def toggle_mark(client, item, kind):
+    """Flip one mark on the server, then on ``item``; returns the new value."""
+    on = not state(item)[kind]
+    _MARKS[kind][1](client, item["content_id"], on)
+    set_mark(item, kind, on)
+    return on
+
+
 def rating(item):
     """The profile's rating for an item detail (1 to 10, two per star), or None when unrated."""
     value = (item or {}).get("user_rating")

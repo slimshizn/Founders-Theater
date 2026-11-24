@@ -393,9 +393,6 @@ class DetailsWindowTests(unittest.TestCase):
         self.assertEqual(window.properties["silo.title"], "EXAMPLE SHOW")
         self.assertEqual(window.properties["silo.supertitle"], "")
         self.assertEqual(window.properties["silo.plot"], "A show.")
-        window.getControl(520).getSelectedPosition.return_value = 1
-        window.onClick(520)
-        self.app.open_item.assert_called_once_with(window.episodes[1])
 
     def test_season_page_lists_its_episodes_without_capsules(self):
         season = {"content_id": "season:1", "type": "season", "season_number": 1, "title": "Season 1",
@@ -1046,6 +1043,29 @@ class NextUpControlsTests(unittest.TestCase):
         self.assertEqual(window.visible_buttons, [105, 104, 103, 110, 106] + MARKS)
         self.assertEqual(window.properties["silo.continue_label"], "Resume E2")
 
+    def test_ok_on_an_episode_card_plays_it_at_once(self):
+        window = self.open()
+        window.getControl(ui_details.EPISODES).getSelectedPosition.return_value = 2
+        self.app.play.return_value = "file-a"
+        window.onClick(ui_details.EPISODES)
+        self.app.open_item.assert_not_called()
+        played, kwargs = self.app.play.call_args.args[0], self.app.play.call_args.kwargs
+        self.assertEqual(played["content_id"], "episode:1-3")
+        # Another episode starts from its own defaults; the page's choices are the next-up episode's.
+        self.assertEqual(kwargs, {"fresh": True})
+        self.assertEqual(self.app.client.item.call_args_list[1].args, ("episode:1-3",))
+
+    def test_ok_on_the_next_up_episodes_card_carries_the_pages_choices(self):
+        window = self.open()
+        self.app.choose_subtitle.return_value = 0
+        window.onClick(106)
+        window.getControl(ui_details.EPISODES).getSelectedPosition.return_value = 1  # episode:1-2
+        self.app.play.return_value = "file-a"
+        window.onClick(ui_details.EPISODES)
+        self.assertEqual(self.app.play.call_args.args[0]["content_id"], "episode:1-2")
+        self.assertEqual(self.app.play.call_args.kwargs["subtitle_index"], 0)
+        self.assertEqual(self.app.play.call_args.kwargs["file_id"], "file-a")
+
     def test_without_the_episodes_detail_next_up_plays_as_before(self):
         for detail in ({"content_id": "episode:other", "type": "episode"}, OSError("offline")):
             with self.subTest(detail=type(detail).__name__):
@@ -1061,6 +1081,52 @@ class NextUpControlsTests(unittest.TestCase):
                 self.assertEqual(window.properties["silo.choosers"], "")
                 window.onClick(105)
                 self.app.play_next.assert_called_once_with(window.item)
+
+
+class CardMenuTests(unittest.TestCase):
+    """Long-press on an episode card or a box set page's movie (Android TvMediaCardContextMenu)."""
+
+    setUp = DetailsWindowTests.setUp
+    window = DetailsWindowTests.window
+
+    def long_press(self, window, control_id, choice):
+        window.focus_id = control_id
+        self.app.dialog.contextmenu.return_value = choice
+        window.onAction(Action(117))
+        return self.app.dialog.contextmenu.call_args.args[0] if self.app.dialog.contextmenu.called else None
+
+    def test_an_episode_card_marks_watched_or_favorite_or_opens_its_page(self):
+        self.app.client.item.side_effect = lambda content_id, **params: next_up_detail(content_id)
+        self.app.refresh_item.side_effect = lambda item, file_id=None: item
+        window = self.window(series_item(), SEASONS)
+        window.onInit()
+        window.getControl(ui_details.EPISODES).getSelectedPosition.return_value = 2
+        labels = self.long_press(window, ui_details.EPISODES, 0)
+        self.assertEqual(labels, ["Mark as watched", "Add to favorites", "Go to episode"])
+        self.app.client.request.assert_any_call("POST", "/watched/episode%3A1-3")
+        self.app.refresh_item.assert_any_call(series_item())  # The series' progress and next-up follow.
+        self.long_press(window, ui_details.EPISODES, 1)
+        self.app.client.request.assert_any_call("PUT", "/favorites/episode%3A1-3")
+        self.long_press(window, ui_details.EPISODES, 2)
+        self.app.open_item.assert_called_once_with(window.episodes[2])
+
+    def test_a_long_press_off_the_cards_opens_nothing(self):
+        window = self.window(movie_item())
+        window.onInit()
+        self.assertIsNone(self.long_press(window, ui_details.PLAY, 0))
+
+    def test_a_box_set_movie_can_be_marked_and_the_page_follows(self):
+        window = ui_details.BoxSetWindow("SiloDetails.xml", ".")
+        window.application, window.box_set_id, window.library_id = self.app, "1241", "2"
+        window.found = box_set_found(played=(1,))
+        window.onInit()
+        window.getControl(ui_details.BOXSET).getSelectedPosition.return_value = 1
+        with patch.object(ui_details.svc_boxsets, "load", return_value=box_set_found(played=(1, 2))) as load:
+            labels = self.long_press(window, ui_details.BOXSET, 0)
+        self.assertEqual(labels, ["Mark as watched", "Add to watchlist", "Add to favorites"])
+        self.app.client.request.assert_any_call("POST", "/watched/movie%3A2")
+        load.assert_called_once_with(self.app.client, "1241", "2")
+        self.assertEqual(window.properties["silo.play_label"], "Continue · Film 3")
 
 
 def collection_card(number, count=8):

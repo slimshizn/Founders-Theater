@@ -20,6 +20,27 @@ class PersonalServiceTests(unittest.TestCase):
         svc_personal.set_watched(self.client, "episode:1", False)
         self.client.request.assert_called_with("DELETE", "/watched/episode%3A1")
 
+    def test_mark_entries_name_each_marks_next_state(self):
+        item = {"user_state": {"played": True, "in_watchlist": False, "is_favorite": True}}
+        self.assertEqual(svc_personal.mark_entries(item), [
+            ("watched", "Mark as unwatched"), ("watchlist", "Add to watchlist"), ("favorite", "Remove from favorites")])
+        self.assertEqual(svc_personal.mark_entries({}, ("watched", "favorite")),
+                         [("watched", "Mark as watched"), ("favorite", "Add to favorites")])
+
+    def test_toggle_mark_flips_the_server_then_the_card(self):
+        item = {"content_id": "movie:1", "user_state": {"played": False}, "user_data": {"played": False}}
+        self.assertIs(svc_personal.toggle_mark(self.client, item, "watched"), True)
+        self.client.request.assert_called_with("POST", "/watched/movie%3A1")
+        self.assertEqual((item["user_state"]["played"], item["user_data"]["played"]), (True, True))
+        self.assertIs(svc_personal.toggle_mark(self.client, item, "watched"), False)
+        self.client.request.assert_called_with("DELETE", "/watched/movie%3A1")
+        card = {"content_id": "series:1"}
+        svc_personal.toggle_mark(self.client, card, "favorite")
+        self.client.request.assert_called_with("PUT", "/favorites/series%3A1")
+        self.assertEqual(card, {"content_id": "series:1", "user_state": {"is_favorite": True}})
+        svc_personal.toggle_mark(self.client, card, "watchlist")
+        self.assertTrue(card["user_state"]["in_watchlist"])
+
     def test_ratings_put_a_score_from_1_to_10_or_delete(self):
         for score in (1, 5, 10):
             svc_personal.set_rating(self.client, "movie:a b", score)

@@ -1249,11 +1249,11 @@ class ContextMenuTests(unittest.TestCase):
         window = open_window(make_application(sections))
         request, calls = routes({})
         window.application.client.request.side_effect = request
-        window.application.dialog.contextmenu.return_value = 3
+        window.application.dialog.contextmenu.return_value = 4
         window.application.home_sections.reset_mock()
         window.onAction(Action(CONTEXT))
         self.assertEqual(window.application.dialog.contextmenu.call_args.args[0], [
-            "Mark as watched", "Add to watchlist", "Add to favorites", "Remove from Continue Watching"])
+            "Play", "Mark as watched", "Add to watchlist", "Add to favorites", "Remove from Continue Watching"])
         self.assertEqual(calls, [("PUT", "/home/dismissals/continue_watching/movie%3A0",
                                   {"progress_updated_at": "2026-01-02T03:04:05Z"}, None)])
         window.application.home_sections.assert_called_once()
@@ -1264,11 +1264,22 @@ class ContextMenuTests(unittest.TestCase):
         window = open_window(make_application(sections))
         request, calls = routes({})
         window.application.client.request.side_effect = request
-        window.application.dialog.contextmenu.return_value = 3
+        window.application.dialog.contextmenu.return_value = 4
         window.onAction(Action(CONTEXT))
         labels = window.application.dialog.contextmenu.call_args.args[0]
-        self.assertEqual(labels[3:], ["Remove from Next Up", "Go to series"])
+        self.assertEqual(labels[4:], ["Remove from Next Up", "Go to series"])
         self.assertEqual(calls, [("PUT", "/home/dismissals/next_up/episode%3A4", {"series_id": "series:1"}, None)])
+
+    def test_continue_watching_cards_play_or_resume_at_once(self):
+        sections = [section("Continue Watching", "continue_watching"), section("Recently Added")]
+        sections[0]["items"][0].update(item_source="in_progress", position_seconds=300, duration_seconds=6000)
+        window = open_window(make_application(sections))
+        window.application.dialog.contextmenu.return_value = 0
+        window.onAction(Action(CONTEXT))
+        self.assertEqual(window.application.dialog.contextmenu.call_args.args[0][0], "Resume")
+        window.application.play_card.assert_called_once()
+        self.assertEqual(window.application.play_card.call_args.args[0]["content_id"], "movie:0")
+        self.assertEqual(window.focus, ui_home.slot_ids(0)[3])
 
     def test_marks_toggle_from_the_current_state(self):
         sections = [section("Recently Added")]

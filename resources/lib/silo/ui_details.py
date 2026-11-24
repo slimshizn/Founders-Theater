@@ -23,8 +23,8 @@ from .present import is_unwatched, language_name
 from .media import (available_versions, default_version, format_time, is_multipart, resume_position,
                     subtitle_choices, version_label, version_name)
 from .player_extras import audio_track_label
-from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, Debouncer,
-                        card_list_item, collection_list_item, set_properties)
+from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, CONTEXT_ACTIONS, Debouncer,
+                        card_list_item, card_menu, collection_list_item, set_properties)
 
 PLAY, RESUME, VERSION, START_OVER, NEXT_UP, SUBTITLES = 100, 101, 103, 104, 105, 106
 WATCHLIST, FAVORITE, MORE, AUDIO = 107, 108, 109, 110
@@ -399,6 +399,8 @@ class DetailsWindow(xbmcgui.WindowXML):
         if action_id in BACK_ACTIONS:
             self.season_settle.cancel()
             self.close()
+        elif action_id in CONTEXT_ACTIONS:
+            self.application.guard(self.open_card_menu)
         elif action_id in (ACTION_UP, ACTION_DOWN):
             self.move_zone(-1 if action_id == ACTION_UP else 1)
         elif action_id in (ACTION_LEFT, ACTION_RIGHT):
@@ -460,7 +462,7 @@ class DetailsWindow(xbmcgui.WindowXML):
         elif control_id == EPISODES:
             episode = self.selected(EPISODES, self.episodes)
             if episode is not None:
-                self.application.open_item(episode)
+                self.play_episode(episode)
         elif control_id == SIMILAR:
             item = self.selected(SIMILAR, self.similar)
             if item is not None:
@@ -493,6 +495,36 @@ class DetailsWindow(xbmcgui.WindowXML):
         audio = {"audio_index": self.audio_index} if self.audio_source == "picked" else {}
         file_id = self.application.play(self.target(), resume=resume, file_id=self.selected_file_id,
                                         subtitle_index=self.subtitle_index, **audio)
+        if file_id is not None:
+            self.refresh(file_id, after_playback=True)
+
+    def open_card_menu(self):
+        """Long-press on an episode card: mark it watched or a favorite, as Android's rail offers,
+        or open the episode's own page (OK plays the episode instead)."""
+        if self.focused() != EPISODES:
+            return
+        episode = self.selected(EPISODES, self.episodes)
+        if episode is None:
+            return
+        key = card_menu(self.application, episode, ("watched", "favorite"), after=[("open", "Go to episode")])
+        if key == "open":
+            self.application.open_item(episode)
+        elif key == "watched":
+            # The series' progress and next-up episode follow, and the rail shows the new mark.
+            self.refresh(self.selected_file_id)
+            self.reload_children()
+
+    def play_episode(self, episode):
+        """OK on an episode card plays it at once (Android seriesEpisodePlaybackLaunch). The
+        page's choices go with it only on the next-up episode they were made for; any other
+        episode is read and played from its own defaults. Long-press opens its page."""
+        if self.next_up and episode.get("content_id") == self.next_up.get("content_id"):
+            self.play_target(None)
+            return
+        detail = self.application.client.item(episode["content_id"])
+        if not isinstance(detail, dict) or not self.application.is_playable(detail):
+            return
+        file_id = self.application.play(detail, fresh=True)
         if file_id is not None:
             self.refresh(file_id, after_playback=True)
 
@@ -1424,6 +1456,14 @@ class BoxSetWindow(DetailsWindow):
                 self.reload()
         elif control_id == READ_MORE:
             super()._click(control_id)
+
+    def open_card_menu(self):
+        """Long-press on one of the box set's movies: watched, watchlist and favorite."""
+        if self.focused() != BOXSET:
+            return
+        movie = self.selected(BOXSET, self.box_set_movies)
+        if movie is not None and card_menu(self.application, movie) == "watched":
+            self.reload()  # Play and the watched count follow.
 
     def play_box_set(self):
         """Play the next movie to watch; the profile's resume setting decides where it starts."""

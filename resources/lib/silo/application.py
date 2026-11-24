@@ -47,6 +47,13 @@ def error_location(exc):
     return type(exc).__name__ + (" at " + where if where else "")
 
 
+def card_content_id(card):
+    """The title a card stands for: a Continue Watching or Next Up card means its episode."""
+    if card.get("play_content_id") and card.get("item_source") in ("in_progress", "next_up"):
+        return card["play_content_id"]
+    return card["content_id"]
+
+
 class Application:
     def __init__(self):
         self.addon = xbmcaddon.Addon()
@@ -714,11 +721,16 @@ class Application:
             return None
         return self.play(self.client.item(content_id), fresh=True)
 
+    def play_card(self, card):
+        """Play a card's title at once (a card menu's Play or Resume): resume a card that shows
+        progress, as Android's Continue Watching does; otherwise Play's preferences decide."""
+        item = self.client.item(card_content_id(card))
+        if not isinstance(item, dict):
+            return None
+        return self.play(item, resume=True if resume_position(card) > 0 else None, fresh=True)
+
     def open_item(self, card):
-        content_id = card["content_id"]
-        if card.get("play_content_id") and card.get("item_source") in ("in_progress", "next_up"):
-            content_id = card["play_content_id"]
-        item = self.client.item(content_id)
+        item = self.client.item(card_content_id(card))
         children = self.client.children(item) if item.get("type") in ("series", "season") else []
         if isinstance(children, dict):
             children = children.get("items", [])

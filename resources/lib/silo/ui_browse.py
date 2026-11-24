@@ -13,10 +13,9 @@ import xbmcgui
 
 from . import present, svc_browse, svc_personal
 from .present import count_text
-from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, Debouncer,
-                        card_list_item, collection_list_item, set_properties)
+from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, CONTEXT_ACTIONS, Debouncer,
+                        card_list_item, card_menu, collection_list_item, set_properties, update_card)
 
-ACTION_CONTEXT_MENU = 117
 SCREEN_WIDTH = 1920
 
 # Shared ids.
@@ -51,6 +50,9 @@ PERSONAL = {
     "favorites": ("Favorites", "No favorites yet", "Remove from Favorites"),
     "history": ("History", "Nothing watched yet", "Remove from History"),
 }
+# A personal list's card menu leaves out the mark its own Remove entry already is.
+PERSONAL_MARKS = {"watchlist": ("watched", "favorite"), "favorites": ("watched", "watchlist"),
+                  "history": svc_personal.MARK_KINDS}
 
 
 def slot_ids(index):
@@ -273,6 +275,8 @@ class RowsWindow(BrowseWindow):
     """
 
     rows_top = HERO_ROWS_TOP
+    # A long press on a title card opens its menu: watched, watchlist and favorite.
+    card_menus = True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -451,7 +455,9 @@ class RowsWindow(BrowseWindow):
         if row is None:
             self.header_action(focus, action_id)
             return
-        if action_id == ACTION_UP:
+        if action_id in CONTEXT_ACTIONS:
+            self.application.guard(lambda: self.card_menu(row))
+        elif action_id == ACTION_UP:
             if row > 0:
                 self.focus_row(row - 1)
             else:
@@ -466,6 +472,18 @@ class RowsWindow(BrowseWindow):
 
     def header_action(self, focus, action_id):
         pass
+
+    def card_menu(self, index):
+        row = self.rows[index]
+        if not self.card_menus or row.get("kind") == "collection":
+            return
+        control = self.getControl(self.row_list(index))
+        position = control.getSelectedPosition()
+        if not 0 <= position < len(row["items"]):
+            return
+        item = row["items"][position]
+        if card_menu(self.application, item):
+            update_card(control, position, item, self.application.image)
 
     def _click(self, control_id):
         index = self.row_of(control_id)
@@ -487,6 +505,8 @@ class RowsWindow(BrowseWindow):
 
 class CalendarWindow(RowsWindow):
     """Upcoming episodes and movies by day for one week; Left/Right on the week control change it."""
+
+    card_menus = False  # Airings, not library titles.
 
     rows_top = CALENDAR_ROWS_TOP
 
@@ -644,8 +664,8 @@ class GridWindow(BrowseWindow):
     """A poster grid with an optional heading, overview and backdrop.
 
     ``fetch(cursor)`` returns {"items", "next_cursor", "total"}; ``kind`` "collection" shows
-    collections; ``caption(item)`` overrides the second caption line; ``remove(item)``
-    enables the context menu's ``remove_label`` entry.
+    collections; ``caption(item)`` overrides the second caption line. A title card's context
+    menu offers the ``mark_kinds`` marks, then ``remove_label`` when ``remove(item)`` is set.
     """
 
     def __init__(self, *args, **kwargs):
@@ -659,6 +679,7 @@ class GridWindow(BrowseWindow):
         self.caption = None
         self.remove = None
         self.remove_label = "Remove"
+        self.mark_kinds = svc_personal.MARK_KINDS
         self.confirm_remove = False
         self.refresh_on_return = False
         self.empty_text = "No titles to show"
@@ -723,19 +744,24 @@ class GridWindow(BrowseWindow):
         action_id = action.getId()
         if action_id in BACK_ACTIONS:
             self.close()
-        elif action_id == ACTION_CONTEXT_MENU and self.focus_id() == GRID:
+        elif action_id in CONTEXT_ACTIONS and self.focus_id() == GRID:
             self.application.guard(self.context_menu)
         elif self.focus_id() == GRID and action_id in (ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT):
             self.application.guard(self.load_more)
 
     def context_menu(self):
-        if self.remove is None:
+        if self.kind == "collection":
             return
-        position = self.getControl(GRID).getSelectedPosition()
+        grid = self.getControl(GRID)
+        position = grid.getSelectedPosition()
         if not 0 <= position < len(self.items):
             return
         item = self.items[position]
-        if self.application.dialog.contextmenu([self.remove_label]) != 0:
+        key = card_menu(self.application, item, self.mark_kinds,
+                        after=[("remove", self.remove_label)] if self.remove is not None else [])
+        if key != "remove":
+            if key:
+                update_card(grid, position, item, self.application.image)
             return
         if self.confirm_remove and not self.application.dialog.yesno(
                 self.remove_label, "Remove {} from your history?".format(present.card_title(item))):
@@ -853,7 +879,8 @@ def open_personal(application, kind):
     open_window(application, GridWindow, "SiloBrowseGrid.xml", title=title,
                 fetch=lambda cursor: reader(client, cursor, size),
                 caption=watched_caption if kind == "history" else None,
-                remove=removers[kind], remove_label=remove_label, confirm_remove=kind == "history",
+                remove=removers[kind], remove_label=remove_label, mark_kinds=PERSONAL_MARKS[kind],
+                confirm_remove=kind == "history",
                 refresh_on_return=kind != "history", empty_text=empty,
                 error_text="{} could not be loaded.".format(title))
 

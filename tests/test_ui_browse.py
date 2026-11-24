@@ -191,6 +191,23 @@ class ForYouTests(unittest.TestCase):
         self.assertEqual(window.properties["silo.hero.title"], "Example Movie 1")
         window.getControl(ui_browse.slot_ids(2)[0]).setVisible.assert_called_with(False)
 
+    def test_a_long_press_on_a_card_marks_it_in_place(self):
+        client = FakeClient({"/recommendations/discover": self.discover()})
+        application = make_application(client)
+        window = run(ui_browse.open_for_you, application)[0]
+        poster = ui_browse.slot_ids(0)[4]
+        window.getControl(poster).getSelectedPosition.return_value = 1
+        application.dialog.contextmenu.return_value = 2
+        window.onAction(Action(MENU))
+        application.dialog.contextmenu.assert_called_with(["Mark as watched", "Add to watchlist", "Add to favorites"])
+        self.assertEqual(client.calls[-1][:2], ("PUT", "/favorites/movie%3A2"))
+        self.assertTrue(window.rows[0]["items"][1]["user_state"]["is_favorite"])
+        application.dialog.contextmenu.return_value = 0
+        window.onAction(Action(MENU))
+        window.getControl(poster).getListItem.return_value.setProperty.assert_any_call("silo.watched", "true")
+        # The calendar lists airings rather than library titles, and keeps its keys as they are.
+        self.assertFalse(ui_browse.CalendarWindow.card_menus)
+
     def test_hero_follows_focus_and_rows_scroll(self):
         client = FakeClient({"/recommendations/discover": self.discover()})
         window = run(ui_browse.open_for_you, make_application(client))[0]
@@ -504,9 +521,10 @@ class PersonalTests(unittest.TestCase):
         window.onAction(Action(DOWN))  # No cursor left.
         self.assertEqual(len(client.calls), 2)
         window.getControl(ui_browse.GRID).getSelectedPosition.return_value = 3
-        application.dialog.contextmenu.return_value = 0
+        application.dialog.contextmenu.return_value = 2
         window.onAction(Action(MENU))
-        application.dialog.contextmenu.assert_called_with(["Remove from Watchlist"])
+        application.dialog.contextmenu.assert_called_with(["Mark as watched", "Add to favorites",
+                                                           "Remove from Watchlist"])
         self.assertEqual(client.calls[-1][:2], ("DELETE", "/watchlist/movie%3A3"))
         self.assertNotIn("movie:3", [item["content_id"] for item in window.items])
         window.getControl(ui_browse.GRID).selectItem.assert_called_with(3)
@@ -526,8 +544,10 @@ class PersonalTests(unittest.TestCase):
         application = make_application(client)
         window = run(ui_browse.open_personal, application, "favorites")[0]
         window.focus = ui_browse.GRID
-        application.dialog.contextmenu.return_value = 0
+        application.dialog.contextmenu.return_value = 2
         window.onAction(Action(MENU))
+        application.dialog.contextmenu.assert_called_with(["Mark as watched", "Add to watchlist",
+                                                           "Remove from Favorites"])
         self.assertEqual(client.paths("DELETE"), ["/favorites/movie%3A1"])
         self.assertEqual(window.properties["silo.empty"], "No favorites yet")
 
@@ -539,9 +559,11 @@ class PersonalTests(unittest.TestCase):
         window = run(ui_browse.open_personal, application, "history")[0]
         self.assertEqual(items_added(window, ui_browse.GRID)[0].label2, "Watched Mar 4, 2025")
         window.focus = ui_browse.GRID
-        application.dialog.contextmenu.return_value = 0
+        application.dialog.contextmenu.return_value = 3
         application.dialog.yesno.return_value = True
         window.onAction(Action(MENU))
+        application.dialog.contextmenu.assert_called_with(["Mark as watched", "Add to watchlist", "Add to favorites",
+                                                           "Remove from History"])
         self.assertEqual(client.calls[-1], ("POST", "/history/remove", None,
                                             {"targets": [{"content_id": "movie:1"}]}))
         self.assertEqual(window.properties["silo.empty"], "Nothing watched yet")
@@ -551,10 +573,24 @@ class PersonalTests(unittest.TestCase):
         application = make_application(client)
         window = run(ui_browse.open_personal, application, "history")[0]
         window.focus = ui_browse.GRID
-        application.dialog.contextmenu.return_value = 0
+        application.dialog.contextmenu.return_value = 3
         application.dialog.yesno.return_value = False
         window.onAction(Action(MENU))
         self.assertEqual(client.paths("POST"), [])
+
+    def test_marking_a_listed_title_keeps_it_and_updates_its_card(self):
+        client = FakeClient({"/watchlist": page([movie(1), movie(2)])})
+        application = make_application(client)
+        window = run(ui_browse.open_personal, application, "watchlist")[0]
+        window.focus = ui_browse.GRID
+        window.getControl(ui_browse.GRID).getSelectedPosition.return_value = 1
+        application.dialog.contextmenu.return_value = 0
+        window.onAction(Action(MENU))
+        self.assertEqual(client.calls[-1][:2], ("POST", "/watched/movie%3A2"))
+        self.assertEqual(len(window.items), 2)
+        self.assertTrue(window.items[1]["user_state"]["played"])
+        window.getControl(ui_browse.GRID).getListItem.assert_called_with(1)
+        window.getControl(ui_browse.GRID).getListItem.return_value.setProperty.assert_any_call("silo.watched", "true")
 
     def test_open_item_then_reload_watchlist(self):
         client = FakeClient({"/watchlist": page([movie(1), movie(2)])})

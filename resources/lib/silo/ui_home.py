@@ -7,8 +7,10 @@ from urllib.parse import quote
 import xbmcgui
 
 from . import present, svc_boxsets, svc_personal
-from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_MOUSE_MOVE, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, Debouncer,
-                        box_set_list_item, card_list_item, collection_list_item, search_heading, set_properties)
+from .media import resume_position
+from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_MOUSE_MOVE, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS,
+                        CONTEXT_ACTIONS, Debouncer, box_set_list_item, card_list_item, card_menu, collection_list_item,
+                        search_heading, set_properties, update_card)
 
 # Control ids; scripts/skin_home.py writes the matching SiloHome.xml.
 TOP_BAR, TAB_CLUSTER, SEARCH_BUTTON, AVATAR = 200, 202, 201, 230
@@ -107,9 +109,6 @@ MENU_RESULTS = {610: "profile", 611: "settings", 617: "server", 612: "logout"}
 MENU_PERSONAL = {613: "watchlist", 614: "favorites", 615: "history"}
 MENU_ROW = 72
 
-# Kodi actions that open a card's context menu: ContextMenu (the Menu key; the default keymap
-# also sends it for a long press of OK), a right click and a long mouse click.
-CONTEXT_ACTIONS = frozenset([117, 101, 108])
 HOME_ROWS_KEY = "home_rows"
 
 
@@ -1208,45 +1207,33 @@ class HomeWindow(xbmcgui.WindowXML):
         item, row = self.context_card(control_id)
         if item is None or item.get("type") in (BOX_SET, COLLECTION):  # These cards have no item menu.
             return
-        marks = svc_personal.state(item)
-        entries = [("watched", "Mark as unwatched" if marks["watched"] else "Mark as watched"),
-                   ("watchlist", "Remove from watchlist" if marks["watchlist"] else "Add to watchlist"),
-                   ("favorite", "Remove from favorites" if marks["favorite"] else "Add to favorites")]
+        before, after = [], []
+        if row is not None and self.sections[row].get("section_type") == "continue_watching":
+            # Android's Continue Watching menu starts with Play, or Resume where the card has progress.
+            before.append(("play", "Resume" if resume_position(item) > 0 else "Play"))
         surface = svc_personal.dismiss_surface(item) if row is not None and self.is_wide(row) else None
         if surface:
-            entries.append(("dismiss", "Remove from Continue Watching" if surface == "continue_watching"
-                            else "Remove from Next Up"))
+            after.append(("dismiss", "Remove from Continue Watching" if surface == "continue_watching"
+                          else "Remove from Next Up"))
         if item.get("type") == "episode" and item.get("series_id"):
-            entries.append(("series", "Go to series"))
-        choice = self.application.dialog.contextmenu([label for _key, label in entries])
-        if not isinstance(choice, int) or not 0 <= choice < len(entries):
+            after.append(("series", "Go to series"))
+        action = card_menu(self.application, item, before=before, after=after)
+        if action is None:
             return
-        action = entries[choice][0]
+        if action == "play":
+            self.run_modal(lambda: self.application.play_card(item), control_id)
+            return
         if action == "series":
             card = {"content_id": item["series_id"], "type": "series"}
             self.run_modal(lambda: self.application.open_item(card), control_id)
             return
-        if self.application.guard(lambda: self.apply_mark(action, item, marks, surface)) is None:
+        if action == "dismiss" and self.application.guard(lambda: self.dismiss(surface, item) or True) is None:
             return
         if row is not None:
             self.refresh_after(control_id, self.card_at(control_id))
         else:
-            self.update_grid_card(control_id, item)
-
-    def apply_mark(self, action, item, marks, surface):
-        client, content_id = self.application.client, item["content_id"]
-        if action == "watched":
-            svc_personal.set_watched(client, content_id, not marks["watched"])
-            self.set_user_state(item, "played", not marks["watched"])
-        elif action == "watchlist":
-            svc_personal.set_watchlist(client, content_id, not marks["watchlist"])
-            self.set_user_state(item, "in_watchlist", not marks["watchlist"])
-        elif action == "favorite":
-            svc_personal.set_favorite(client, content_id, not marks["favorite"])
-            self.set_user_state(item, "is_favorite", not marks["favorite"])
-        elif action == "dismiss":
-            self.dismiss(surface, item)
-        return True
+            update_card(self.getControl(control_id), self.getControl(control_id).getSelectedPosition(), item,
+                        self.card_image)
 
     def dismiss(self, surface, item):
         """PUT /home/dismissals/{surface}/{id} with the anchor the server requires for the surface."""
@@ -1260,24 +1247,6 @@ class HomeWindow(xbmcgui.WindowXML):
         path = "/home/dismissals/{}/{}".format(surface, quote(str(item["content_id"]), safe=""))
         return self.application.client.request(
             "PUT", path, body={key: value for key, value in anchor.items() if value})
-
-    @staticmethod
-    def set_user_state(item, key, value):
-        state = item.get("user_state") if isinstance(item.get("user_state"), dict) else {}
-        item["user_state"] = dict(state, **{key: value})
-        if isinstance(item.get("user_data"), dict):
-            item["user_data"] = dict(item["user_data"], **{key: value})
-
-    def update_grid_card(self, control_id, item):
-        """Grid cards are not reloaded; their watched and progress overlays update in place."""
-        position = self.getControl(control_id).getSelectedPosition()
-        data = present.card(item, self.card_image)
-        try:
-            list_item = self.getControl(control_id).getListItem(position)
-            list_item.setProperty("silo.watched", "true" if data["watched"] else "")
-            list_item.setProperty("silo.progress", str(data["progress"]) if data["progress"] else "")
-        except (RuntimeError, AttributeError):
-            pass
 
     # ------------------------------------------------------------ modal screens and refresh
 
