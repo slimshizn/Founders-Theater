@@ -49,7 +49,14 @@ KODI_MODULES = {
     "xbmcgui": types.SimpleNamespace(WindowXML=FakeWindow, Dialog=MagicMock, ListItem=MagicMock),
 }
 with patch.dict(sys.modules, KODI_MODULES):
-    sys.modules.pop("resources.lib.silo.ui_home", None)
+    # catalog_controls builds the filter search heading with ui_common's search_heading, so it is
+    # imported again with ui_home; the voice hint tests patch that same ui_common. ui_home's
+    # "from . import catalog_controls" reads the package attribute, so that goes too.
+    silo = sys.modules.get("resources.lib.silo")
+    for name in ("ui_home", "catalog_controls"):
+        sys.modules.pop("resources.lib.silo." + name, None)
+        if silo is not None:
+            vars(silo).pop(name, None)
     ui_home = importlib.import_module("resources.lib.silo.ui_home")
     ui_common = importlib.import_module("resources.lib.silo.ui_common")
 

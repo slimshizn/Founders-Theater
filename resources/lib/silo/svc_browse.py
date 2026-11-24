@@ -261,19 +261,36 @@ def all_collections(client, libraries):
     return groups
 
 
-def collection_items(client, collection, cursor=None, limit=50, library_id=None):
-    """One page of a collection's titles: {"items", "next_cursor", "total"}."""
+def collection_scope(collection):
+    """The /catalog scope of a collection: a server collection's or a personal one's."""
+    collection = _dict(collection)
+    source = "library_collection" if collection.get("kind") == "library" else "user_collection"
+    return {"source": source, "collection_id": collection.get("id")}
+
+
+def collection_items(client, collection, cursor=None, limit=50, library_id=None, sort=None, groups=None):
+    """One page of a collection's titles: {"items", "next_cursor", "total"}.
+
+    Without ``sort`` or filter ``groups`` (a JSON rule-group string) the titles come in the
+    collection's own order. With them they come from /catalog with the collection's source,
+    as Android's collection page reads them.
+    """
     collection = _dict(collection)
     library_id = library_id if library_id is not None else collection.get("library_id")
     params = {"limit": limit}
     if cursor:
         params["cursor"] = cursor
-    if collection.get("kind") == "library" and library_id not in (None, ""):
+    library = collection.get("kind") == "library"
+    if library and library_id not in (None, "") and not sort and not groups:
         path = "/library/{}/collections/{}/items".format(_id(library_id), _id(collection["id"]))
         return _page(_get(client, path, **params))
-    params.update(source="user_collection", collection_id=collection["id"])
-    if library_id not in (None, ""):
+    params.update(collection_scope(collection))
+    if not library and library_id not in (None, ""):
         params["library_id"] = library_id
+    if sort:
+        params["sort"] = sort
+    if groups:
+        params["groups"] = groups
     return _page(_get(client, "/catalog", **params))
 
 

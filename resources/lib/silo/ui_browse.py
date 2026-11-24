@@ -7,11 +7,12 @@ XML; control ids must match.
 """
 
 import datetime
+import json
 import os
 
 import xbmcgui
 
-from . import present, svc_browse, svc_personal
+from . import catalog_controls as controls, present, svc_browse, svc_personal, svc_shuffle
 from .present import count_text
 from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS, CONTEXT_ACTIONS, Debouncer,
                         card_list_item, card_menu, collection_list_item, set_properties, update_card)
@@ -41,6 +42,10 @@ MONTH_NAMES = ("January", "February", "March", "April", "May", "June", "July", "
 # Grid window.
 GRID, HEADING, GRID_META, OVERVIEW = 500, 410, 420, 430
 GRID_LEFT, GRID_TOP_PLAIN, GRID_TOP_HEADING, GRID_TOP_OVERVIEW = 40, 148, 270, 400
+# A collection page's controls (Android TvBrowseControlRow) sit above its grid.
+GRID_SORT, GRID_FILTERS, GRID_CLEAR, GRID_SHUFFLE = 510, 516, 517, 518
+CHIP_LEFT, CHIP_GAP, CHIP_SHIFT, CHIP_ROW = 88, 16, 10, 84
+NO_MATCH = "No titles match these filters"
 
 # Person window.
 READ_MORE, BIO_PREVIEW = 600, 280
@@ -687,16 +692,97 @@ class GridWindow(BrowseWindow):
         self.open_collection = None
         self.items = []
         self.cursor = None
+        # Sort, Filters, Clear filters and Shuffle chips (a collection's page). ``sorts`` turns
+        # them on, and ``fetch(cursor, sort=, groups=)`` then takes the choices; ``filter_scope``
+        # is the /catalog/filters scope and ``shuffle_scope`` play_shuffle's scope keyword.
+        self.sorts = None
+        self.sort = ""
+        self.reversed = False
+        self.filters = {}
+        self.filter_scope = None
+        self.filter_options = None
+        self.shuffle_scope = None
+        self.can_shuffle = False
+        self.chips_top = 0
 
     def start(self):
         set_properties(self, {"silo.heading": self.heading, "silo.meta": self.meta,
                               "silo.overview": self.overview, "silo.backdrop": self.backdrop})
         top = GRID_TOP_OVERVIEW if self.overview else GRID_TOP_HEADING if self.heading else GRID_TOP_PLAIN
         grid = self.getControl(GRID)
+        if self.sorts:
+            self.chips_top = top + CHIP_SHIFT
+            top += CHIP_ROW
+            kind = dict(svc_shuffle.SCOPE_KEYS).get(next(iter(self.shuffle_scope or {}), None))
+            self.can_shuffle = bool(kind) and svc_shuffle.available(self.application.client, kind)
+            self.update_chips()
         grid.setPosition(GRID_LEFT, top)
         grid.setHeight(SCREEN_HEIGHT - top)
         self.load()
         self.setFocusId(GRID)
+
+    def fetch_page(self, cursor):
+        if not self.sorts:
+            return self.fetch(cursor)
+        groups = controls.filter_groups(self.filters)
+        return self.fetch(cursor, sort=controls.sort_term(self.sort, self.reversed) or None,
+                          groups=json.dumps(groups, separators=(",", ":")) if groups else None)
+
+    def update_chips(self):
+        count = controls.active_facets(self.filters)
+        chips = [(GRID_SORT, "Sort: " + controls.sort_chip(self.sorts, self.sort, self.reversed)),
+                 (GRID_FILTERS, "Filters ({})".format(count) if count else "Filters")]
+        if count:
+            chips.append((GRID_CLEAR, "Clear filters"))
+        if self.can_shuffle:
+            chips.append((GRID_SHUFFLE, "Shuffle"))
+        set_properties(self, {"silo.controls": "true", "silo.filter_count": str(count) if count else "",
+                              "silo.can_shuffle": "true" if self.can_shuffle else ""})
+        left = CHIP_LEFT
+        for control_id, text in chips:
+            width = pill_width(text)
+            chip = self.getControl(control_id)
+            chip.setLabel(text)
+            chip.setPosition(left, self.chips_top)
+            chip.setWidth(width)
+            left += width + CHIP_GAP
+        shown = [control_id for control_id, _text in chips]
+        for before, after in zip(shown, shown[1:]):
+            self.getControl(before).controlRight(self.getControl(after))
+            self.getControl(after).controlLeft(self.getControl(before))
+        self.getControl(GRID).controlUp(self.getControl(GRID_SORT))
+
+    def choose_sort(self):
+        chosen = controls.choose_sort(self.application.dialog, self.sorts, self.sort, self.reversed)
+        if chosen is not None:
+            self.sort, self.reversed = chosen
+            self.update_chips()
+            self.load()
+
+    def choose_filters(self):
+        client = self.application.client
+        if self.filter_options is None:
+            response = client.request("GET", "/catalog/filters", params=dict(self.filter_scope or {}))
+            self.filter_options = response if isinstance(response, dict) else {}
+
+        def search(facet, text, current):
+            return controls.facet_search(client, self.filter_scope or {}, facet, text, current)
+
+        if controls.choose_filters(self.application.dialog, self.filters, self.filter_options, search):
+            self.update_chips()
+            self.load()
+
+    def clear_filters(self):
+        if self.filters:
+            self.filters.clear()
+            self.update_chips()
+            self.load()
+        self.setFocusId(GRID_FILTERS)
+
+    def shuffle(self):
+        self.last_focus = GRID_SHUFFLE
+        if svc_shuffle.play_shuffle(self.application, **self.shuffle_scope):
+            self.load(self.getControl(GRID).getSelectedPosition())  # Watched marks and progress follow.
 
     def list_items(self, items):
         if self.kind == "collection":
@@ -712,7 +798,7 @@ class GridWindow(BrowseWindow):
     def load(self, position=0):
         self.items, self.cursor = [], None
         self.getControl(GRID).reset()
-        page = self.application.guard(lambda: self.fetch(None))
+        page = self.application.guard(lambda: self.fetch_page(None))
         if page is None:
             self.setProperty("silo.empty", self.error_text)
             return
@@ -728,7 +814,7 @@ class GridWindow(BrowseWindow):
         self.cursor = page.get("next_cursor") or None
         if self.heading and self.kind != "collection" and not self.meta and isinstance(page.get("total"), int):
             self.setProperty("silo.meta", count_text(page["total"]))
-        self.setProperty("silo.empty", "" if self.items else self.empty_text)
+        self.setProperty("silo.empty", "" if self.items else NO_MATCH if self.filters else self.empty_text)
 
     def load_more(self):
         if not self.cursor:
@@ -736,7 +822,7 @@ class GridWindow(BrowseWindow):
         if self.getControl(GRID).getSelectedPosition() < len(self.items) - LOAD_AHEAD:
             return
         cursor, self.cursor = self.cursor, None
-        page = self.fetch(cursor)
+        page = self.fetch_page(cursor)
         if page:
             self.append(page)
 
@@ -776,6 +862,11 @@ class GridWindow(BrowseWindow):
         self.setProperty("silo.empty", "" if self.items or self.cursor else self.empty_text)
 
     def _click(self, control_id):
+        chip = {GRID_SORT: self.choose_sort, GRID_FILTERS: self.choose_filters, GRID_CLEAR: self.clear_filters,
+                GRID_SHUFFLE: self.shuffle}.get(control_id)
+        if chip is not None and self.sorts:
+            chip()
+            return
         if control_id != GRID:
             return
         position = self.getControl(GRID).getSelectedPosition()
@@ -847,10 +938,14 @@ def open_collection(application, collection, library=None):
     if card is None:
         return
     client, size = application.client, page_size(application)
+    shuffle_key = "collection_id" if card["kind"] == "library" else "user_collection_id"
     open_window(application, GridWindow, "SiloBrowseGrid.xml", title="Collection", heading=card["title"],
                 meta=count_text(card.get("count")), overview=card.get("overview") or "",
                 backdrop=application.image(card, "backdrop"),
-                fetch=lambda cursor: svc_browse.collection_items(client, card, cursor, size, library_id),
+                fetch=lambda cursor, sort=None, groups=None: svc_browse.collection_items(
+                    client, card, cursor, size, library_id, sort=sort, groups=groups),
+                sorts=controls.COLLECTION_SORTS, filter_scope=svc_browse.collection_scope(card),
+                shuffle_scope={shuffle_key: card["id"]},
                 empty_text="This collection is empty", error_text="This collection could not be loaded.")
 
 

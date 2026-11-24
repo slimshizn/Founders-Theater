@@ -2,6 +2,7 @@
 
 import datetime
 import importlib
+import json
 from pathlib import Path
 import sys
 import types
@@ -373,8 +374,9 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(detail.properties["silo.heading"], "Example Rainy Days")
         self.assertEqual(detail.properties["silo.meta"], "2 titles")
         self.assertEqual(detail.properties["silo.overview"], "Cozy picks.")
-        detail.getControl(ui_browse.GRID).setPosition.assert_called_with(ui_browse.GRID_LEFT,
-                                                                           ui_browse.GRID_TOP_OVERVIEW)
+        # The Sort and Filters chips sit between the overview and the grid.
+        detail.getControl(ui_browse.GRID).setPosition.assert_called_with(
+            ui_browse.GRID_LEFT, ui_browse.GRID_TOP_OVERVIEW + ui_browse.CHIP_ROW)
         self.assertEqual([item["content_id"] for item in detail.items], ["movie:1"])
         detail.onClick(ui_browse.GRID)
         application.open_item.assert_called_once_with(movie(1))
@@ -412,7 +414,7 @@ class CollectionTests(unittest.TestCase):
         client = FakeClient({"/library/3/collections/k1/items": lambda params: page([movie(1)])})
         detail = run(ui_browse.open_collection, make_application(client), {"id": "k1", "title": "Example"},
                      {"id": 3})[0]
-        self.assertEqual(client.paths(), ["/library/3/collections/k1/items"])
+        self.assertEqual(client.paths(), ["/shuffles/capabilities", "/library/3/collections/k1/items"])
         self.assertEqual(detail.properties["silo.heading"], "Example")
 
     def test_empty_and_error(self):
@@ -461,6 +463,84 @@ class CollectionTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------- library sections
+
+class CollectionControlsTests(unittest.TestCase):
+    """A collection's page sorts, filters and shuffles (Android TvLibraryCollectionDetailScreen)."""
+
+    CARD = {"id": "k1", "title": "Example Franchise", "kind": "library", "library_id": "3", "count": 2,
+            "overview": "", "poster_url": "", "backdrop_url": ""}
+    PERSONAL = {"id": "c1", "title": "Example Mine", "kind": "personal", "library_id": None, "count": 2,
+                "overview": "", "poster_url": "", "backdrop_url": ""}
+
+    def open(self, card=None, shuffle_kinds=("library_collection", "user_collection")):
+        client = FakeClient({
+            "/library/3/collections/k1/items": lambda params: page([movie(1), movie(2)]),
+            "/catalog": lambda params: page([movie(2), movie(1)]),
+            "/catalog/filters": {"genres": ["Crime", "Drama"]},
+            "/shuffles/capabilities": {"state": "available", "scope_kinds": list(shuffle_kinds)},
+        })
+        application = make_application(client)
+        window = run(ui_browse.open_collection, application, card or self.CARD)[0]
+        return window, client, application
+
+    def test_a_collection_opens_in_its_own_order_with_sort_filters_and_shuffle(self):
+        window, client, _application = self.open()
+        self.assertIn("/library/3/collections/k1/items", client.paths())
+        self.assertEqual(window.properties["silo.controls"], "true")
+        window.getControl(ui_browse.GRID_SORT).setLabel.assert_called_with("Sort: Collection order")
+        window.getControl(ui_browse.GRID_FILTERS).setLabel.assert_called_with("Filters")
+        self.assertEqual(window.properties["silo.can_shuffle"], "true")
+        self.assertEqual(window.properties["silo.filter_count"], "")
+        window.getControl(ui_browse.GRID).controlUp.assert_called_with(window.getControl(ui_browse.GRID_SORT))
+
+    def test_sorting_reads_the_collection_through_the_catalog(self):
+        window, client, application = self.open()
+        values = [value for value, _label, _chip in ui_browse.controls.COLLECTION_SORTS]
+        application.dialog.select.return_value = values.index("title")
+        window.onClick(ui_browse.GRID_SORT)
+        self.assertEqual(client.calls[-1][1:3], ("/catalog", {"limit": 50, "source": "library_collection",
+                                                              "collection_id": "k1", "sort": "title"}))
+        window.getControl(ui_browse.GRID_SORT).setLabel.assert_called_with("Sort: Title")
+        self.assertEqual([item["content_id"] for item in window.items], ["movie:2", "movie:1"])
+
+    def test_filters_read_the_collections_facets_and_clear_returns_to_its_order(self):
+        window, client, application = self.open()
+        application.dialog.select.side_effect = [0, -1]  # Genre, then close.
+        application.dialog.multiselect.return_value = [1]
+        window.onClick(ui_browse.GRID_FILTERS)
+        filters = next(call for call in client.calls if call[1] == "/catalog/filters")
+        self.assertEqual(filters[2], {"source": "library_collection", "collection_id": "k1"})
+        last = client.calls[-1]
+        self.assertEqual(last[1], "/catalog")
+        self.assertEqual(json.loads(last[2]["groups"]),
+                         [{"match": "any", "rules": [{"field": "genre", "op": "contains", "value": "Drama"}]}])
+        self.assertEqual(window.properties["silo.filter_count"], "1")
+        window.getControl(ui_browse.GRID_FILTERS).setLabel.assert_called_with("Filters (1)")
+        window.onClick(ui_browse.GRID_CLEAR)
+        self.assertEqual(client.calls[-1][1], "/library/3/collections/k1/items")
+        self.assertEqual(window.properties["silo.filter_count"], "")
+
+    def test_shuffle_plays_from_the_collection(self):
+        for card, scope in ((self.CARD, {"collection_id": "k1"}), (self.PERSONAL, {"user_collection_id": "c1"})):
+            with self.subTest(kind=card["kind"]):
+                window, _client, application = self.open(card)
+                with patch.object(ui_browse.svc_shuffle, "play_shuffle", return_value=True) as play:
+                    window.onClick(ui_browse.GRID_SHUFFLE)
+                play.assert_called_once_with(application, **scope)
+
+    def test_a_personal_collection_sorts_as_a_user_collection_and_shuffle_needs_the_capability(self):
+        window, client, application = self.open(self.PERSONAL, shuffle_kinds=())
+        self.assertEqual(window.properties["silo.can_shuffle"], "")
+        application.dialog.select.return_value = 1  # Title A–Z
+        window.onClick(ui_browse.GRID_SORT)
+        self.assertEqual(client.calls[-1][2], {"limit": 50, "source": "user_collection", "collection_id": "c1",
+                                               "sort": "title"})
+
+    def test_other_grids_have_no_controls(self):
+        window = run(ui_browse.open_personal, make_application(FakeClient({"/watchlist": page([movie(1)])})),
+                     "watchlist")[0]
+        self.assertEqual(window.properties.get("silo.controls", ""), "")
+
 
 class LibrarySectionTests(unittest.TestCase):
     def test_sections_become_rows_and_lazy_sections_are_fetched(self):
@@ -793,7 +873,8 @@ class SkinTests(unittest.TestCase):
         slots = [control for index in range(ui_browse.SLOTS) for control in ui_browse.slot_ids(index)]
         wanted = {"SiloBrowseRows.xml": rows + slots,
                   "SiloBrowseGrid.xml": [ui_browse.TITLE_PILL, ui_browse.EMPTY, ui_browse.GRID, ui_browse.HEADING,
-                                         ui_browse.GRID_META, ui_browse.OVERVIEW],
+                                         ui_browse.GRID_META, ui_browse.OVERVIEW, ui_browse.GRID_SORT,
+                                         ui_browse.GRID_FILTERS, ui_browse.GRID_CLEAR, ui_browse.GRID_SHUFFLE],
                   "SiloPerson.xml": [ui_browse.TITLE_PILL, ui_browse.EMPTY, ui_browse.READ_MORE] + slots}
         for name, controls in wanted.items():
             ids = set(self.ids(name))

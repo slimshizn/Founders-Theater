@@ -6,7 +6,8 @@ from urllib.parse import quote
 
 import xbmcgui
 
-from . import present, svc_boxsets, svc_personal
+from . import catalog_controls as controls, present, svc_boxsets, svc_personal
+from .catalog_controls import SORTS, active_facets, filter_groups
 from .media import resume_position
 from .ui_common import (ACTION_DOWN, ACTION_LEFT, ACTION_MOUSE_MOVE, ACTION_RIGHT, ACTION_UP, BACK_ACTIONS,
                         CONTEXT_ACTIONS, Debouncer, box_set_list_item, card_list_item, card_menu, collection_list_item,
@@ -52,11 +53,6 @@ BOX_SET_SEARCH_TYPES = ("video", "movie")
 BOX_SET = "box_set"
 COLLECTION = present.COLLECTION  # a card in a home row of collections
 LOAD_AHEAD = 12
-# (sort value, dialog label, chip label); values are the server's catalog sort fields.
-SORTS = (("title", "Title A–Z", "Title"), ("-added_at", "Recently added", "Recently added"),
-         ("-release_date", "Release date", "Release date"), ("-year", "Year", "Year"),
-         ("-rating_imdb", "Rating", "Rating"), ("-runtime", "Runtime", "Runtime"),
-         ("-date_viewed", "Recently watched", "Recently watched"), ("-plays", "Most played", "Most played"))
 
 # A–Z jump rail beside the grid while it is sorted by title (Android TvAlphabetRail).
 RAIL, RAIL_GROUP = 560, 565
@@ -65,28 +61,6 @@ RAIL_LETTERS = ("All", "#") + tuple(chr(code) for code in range(ord("A"), ord("Z
 # Search: a People row above the title grid.
 PEOPLE_GROUP, PEOPLE_LIST = 575, 570
 PEOPLE_HEIGHT, PEOPLE_LIMIT = 290, 20
-
-# Facet filters in Android TvCatalogFacet order. Decade, dynamic range and watch status are fixed
-# vocabularies; the others come from GET /catalog/filters.
-FACETS = (("genre", "Genre"), ("decade", "Decade"), ("watch_status", "Watch status"),
-          ("content_rating", "Content rating"), ("resolution", "Resolution"),
-          ("dynamic_range", "Dynamic range"), ("studio", "Studio"), ("network", "Network"),
-          ("country", "Country"))
-FACET_SOURCES = {"genre": "genres", "content_rating": "content_ratings", "studio": "studios",
-                 "network": "networks", "country": "countries"}
-# (facet, rule field, operator) for facets that lower to one "any" group of value rules.
-VALUE_RULES = (("genre", "genre", "contains"), ("studio", "studio", "is"), ("network", "network", "is"),
-               ("country", "country", "is"), ("content_rating", "content_rating", "is"),
-               ("resolution", "resolution", "is"))
-DECADES = (2020, 2010, 2000, 1990, 1980, 1970, 1960)
-DYNAMIC_RANGES = (("hdr", "HDR"), ("dolby_vision", "Dolby Vision"))
-# (value, label, (rule field, rule value)); watch status is single-select.
-WATCH_STATUSES = (("unwatched", "Unwatched", ("watched", False)), ("in_progress", "In progress", ("in_progress", True)),
-                  ("watched", "Watched", ("watched", True)), ("favorited", "Favorited", ("favorited", True)),
-                  ("watchlist", "Watchlist", ("in_watchlist", True)))
-# Long server lists offer a search first (GET /catalog/filters/search).
-SEARCHABLE_FACETS = frozenset(["genre", "content_rating", "studio", "network", "country"])
-FACET_SEARCH_MIN, FACET_SEARCH_LIMIT = 60, 100
 
 # Top-bar panels; scripts/skin_home.py fades them in a moment after a tab takes focus and keeps
 # them while focus is inside. Movies/Series: the library cascade (Android TvCascadeSelector), a
@@ -127,32 +101,6 @@ def total_text(total):
         return ""
     total = int(total)
     return "{:,} title{}".format(total, "" if total == 1 else "s")
-
-
-def filter_groups(filters):
-    """Lower facet selections to /catalog rule groups, as Android's TvCatalogFacetSelection does."""
-    groups = []
-    for facet, field, op in VALUE_RULES:
-        values = sorted(filters.get(facet) or ())
-        if values:
-            groups.append({"match": "any", "rules": [{"field": field, "op": op, "value": value}
-                                                     for value in values]})
-    decades = sorted(int(value) for value in filters.get("decade") or ())
-    if decades:
-        groups.append({"match": "any", "rules": [{"field": "decade", "op": "is", "value": decade}
-                                                 for decade in decades]})
-    ranges = [value for value, _label in DYNAMIC_RANGES if value in (filters.get("dynamic_range") or ())]
-    if ranges:
-        groups.append({"match": "any", "rules": [{"field": value, "op": "is", "value": True} for value in ranges]})
-    status = next((rule for value, _label, rule in WATCH_STATUSES
-                   if value in (filters.get("watch_status") or ())), None)
-    if status:
-        groups.append({"match": "all", "rules": [{"field": status[0], "op": "is", "value": status[1]}]})
-    return groups
-
-
-def active_facets(filters):
-    return sum(1 for facet, _label in FACETS if filters.get(facet))
 
 
 def card_key(item):
@@ -781,10 +729,7 @@ class HomeWindow(xbmcgui.WindowXML):
         self.load_grid(self.library_params())
 
     def sort_value(self):
-        """The catalog sort term: a leading "-" sorts descending, so reversing flips the sign."""
-        if not self.reversed:
-            return self.sort
-        return self.sort[1:] if self.sort.startswith("-") else "-" + self.sort
+        return controls.sort_term(self.sort, self.reversed)
 
     def library_params(self):
         params = {"type": self.kind, "sort": self.sort_value()}
@@ -797,9 +742,7 @@ class HomeWindow(xbmcgui.WindowXML):
 
     def update_chips(self):
         name = str(self.library.get("name") or "Library") if self.library else "All"
-        sort = next(chip for value, _label, chip in SORTS if value == self.sort)
-        if self.reversed:
-            sort += " (reversed)"
+        sort = controls.sort_chip(SORTS, self.sort, self.reversed)
         count = active_facets(self.filters)
         chips = [(LIBRARY_CHIP, "Library: " + name, True), (SORT_CHIP, "Sort: " + sort, True),
                  (FILTER_CHIP, "Filters", False)]
@@ -839,18 +782,10 @@ class HomeWindow(xbmcgui.WindowXML):
 
     def choose_sort(self):
         """Pick a sort, or the last row to flip the current one's direction."""
-        values = [value for value, _label, _chip in SORTS]
-        current = values.index(self.sort)
-        labels = [label for _value, label, _chip in SORTS]
-        labels.append("Reverse order: " + ("On" if self.reversed else "Off"))
-        choice = self.application.dialog.select("Sort by", labels, preselect=current)
-        if choice < 0 or choice == current:
+        chosen = controls.choose_sort(self.application.dialog, SORTS, self.sort, self.reversed)
+        if chosen is None:
             return
-        if choice == len(values):
-            self.reversed = not self.reversed
-        else:
-            # A new sort starts in its natural direction.
-            self.sort, self.reversed = values[choice], False
+        self.sort, self.reversed = chosen
         self.update_chips()
         self.load_grid(self.library_params())
 
@@ -877,87 +812,12 @@ class HomeWindow(xbmcgui.WindowXML):
             self.filter_options_cache[key] = response if isinstance(response, dict) else {}
         return self.filter_options_cache[key]
 
-    @staticmethod
-    def facet_values(facet, options):
-        """(value, label) pairs the facet offers; facets without any are not listed."""
-        if facet == "decade":
-            return [(str(decade), "{}s".format(decade)) for decade in DECADES]
-        if facet == "dynamic_range":
-            return list(DYNAMIC_RANGES)
-        if facet == "watch_status":
-            return [(value, label) for value, label, _rule in WATCH_STATUSES]
-        if facet == "resolution":
-            technical = options.get("technical") if isinstance(options.get("technical"), dict) else {}
-            values = technical.get("resolutions")
-        else:
-            values = options.get(FACET_SOURCES[facet])
-        return [(str(value), str(value)) for value in values or () if value not in (None, "")]
-
     def choose_filters(self):
-        options = self.filter_options()
-        dialog = self.application.dialog
-        changed = False
-        while True:
-            facets = [(facet, label) for facet, label in FACETS if self.facet_values(facet, options)]
-            labels = []
-            for facet, label in facets:
-                count = len(self.filters.get(facet) or ())
-                labels.append("{} ({})".format(label, count) if count else label)
-            if active_facets(self.filters):
-                labels.append("Clear filters")
-            choice = dialog.select("Filters", labels)
-            if not isinstance(choice, int) or not 0 <= choice < len(labels):
-                break
-            if choice == len(facets):
-                self.filters, changed = {}, True
-                continue
-            facet, label = facets[choice]
-            if self.edit_facet(facet, label, self.facet_values(facet, options)):
-                changed = True
-        if changed:
+        if controls.choose_filters(self.application.dialog, self.filters, self.filter_options(), self.search_facet):
             self.reload_filtered()
 
-    def edit_facet(self, facet, label, values):
-        """Pick the facet's values; True when the selection changed."""
-        dialog = self.application.dialog
-        current = set(self.filters.get(facet) or ())
-        if facet == "watch_status":
-            names = ["Any"] + [name for _value, name in values]
-            preselect = next((index + 1 for index, (value, _name) in enumerate(values) if value in current), 0)
-            choice = dialog.select(label, names, preselect=preselect)
-            if not isinstance(choice, int) or not 0 <= choice < len(names):
-                return False
-            chosen = {values[choice - 1][0]} if choice else set()
-        else:
-            if facet in SEARCHABLE_FACETS and len(values) > FACET_SEARCH_MIN:
-                text = (dialog.input(search_heading("Search " + label.lower(), "leave empty for all")) or "").strip()
-                if text:
-                    values = self.search_facet(facet, text, current)
-            if not values:
-                return False
-            selected = [index for index, (value, _name) in enumerate(values) if value in current]
-            picked = dialog.multiselect(label, [name for _value, name in values], preselect=selected)
-            if picked is None:
-                return False
-            listed = set(value for value, _name in values)
-            chosen = (current - listed) | set(values[index][0] for index in picked if 0 <= index < len(values))
-        if chosen == current:
-            return False
-        if chosen:
-            self.filters[facet] = sorted(chosen)
-        else:
-            self.filters.pop(facet, None)
-        return True
-
     def search_facet(self, facet, text, current):
-        """GET /catalog/filters/search; current selections stay listed first."""
-        params = dict(self.scope_params(), facet=facet, q=text, limit=FACET_SEARCH_LIMIT)
-        response = self.application.client.request("GET", "/catalog/filters/search", params=params) or {}
-        found = [entry.get("value") for entry in response.get("values") or () if isinstance(entry, dict)]
-        if not found:
-            found = list(response.get("matches") or ())
-        values = sorted(current) + [str(value) for value in found if value and str(value) not in current]
-        return [(value, value) for value in values]
+        return controls.facet_search(self.application.client, self.scope_params(), facet, text, current)
 
     def clear_filters(self):
         if not self.filters:

@@ -290,7 +290,16 @@ def grid_window():
     ])
     grid = card_list(500, "panel", 40, 270, 1840, 810, 300, 538, 40, 40, 260, 390, "mask_grid.png", "poster",
                      False, 110, nav(500), orientation="vertical")
-    return document([header, grid, empty_label(640), top_bar()], 500)
+    return document([header, grid_chips(), grid, empty_label(640), top_bar()], 500)
+
+
+def grid_chips():
+    """A collection page's Sort, Filters, Clear filters and Shuffle chips (ui_browse.GRID_SORT…).
+    Python sets their labels, widths, positions and left/right chain; Down reaches the grid."""
+    shown = {510: None, 516: None, 517: has("silo.filter_count"), 518: has("silo.can_shuffle")}
+    chips = [button(control_id, 88, 280, 240, 56, "", navigation=nav(control_id, down=500), condition=condition)
+             for control_id, condition in shown.items()]
+    return group(0, 0, 0, 1920, 1080, chips, condition=has("silo.controls"))
 
 
 def person_window():

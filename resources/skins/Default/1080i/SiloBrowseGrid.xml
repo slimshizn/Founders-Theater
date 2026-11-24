@@ -80,6 +80,87 @@
         <visible>!String.IsEmpty(Window.Property(silo.overview))</visible>
       </control>
     </control>
+    <control type="group">
+      <left>0</left>
+      <top>0</top>
+      <width>1920</width>
+      <height>1080</height>
+      <visible>!String.IsEmpty(Window.Property(silo.controls))</visible>
+      <control type="button" id="510">
+        <left>88</left>
+        <top>280</top>
+        <width>240</width>
+        <height>56</height>
+        <label/>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>center</align>
+        <aligny>center</aligny>
+        <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
+        <texturenofocus border="28">pill56_idle.png</texturenofocus>
+        <onup>510</onup>
+        <ondown>500</ondown>
+        <onleft>510</onleft>
+        <onright>510</onright>
+      </control>
+      <control type="button" id="516">
+        <left>88</left>
+        <top>280</top>
+        <width>240</width>
+        <height>56</height>
+        <label/>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>center</align>
+        <aligny>center</aligny>
+        <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
+        <texturenofocus border="28">pill56_idle.png</texturenofocus>
+        <onup>516</onup>
+        <ondown>500</ondown>
+        <onleft>516</onleft>
+        <onright>516</onright>
+      </control>
+      <control type="button" id="517">
+        <left>88</left>
+        <top>280</top>
+        <width>240</width>
+        <height>56</height>
+        <label/>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>center</align>
+        <aligny>center</aligny>
+        <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
+        <texturenofocus border="28">pill56_idle.png</texturenofocus>
+        <onup>517</onup>
+        <ondown>500</ondown>
+        <onleft>517</onleft>
+        <onright>517</onright>
+        <visible>!String.IsEmpty(Window.Property(silo.filter_count))</visible>
+      </control>
+      <control type="button" id="518">
+        <left>88</left>
+        <top>280</top>
+        <width>240</width>
+        <height>56</height>
+        <label/>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>center</align>
+        <aligny>center</aligny>
+        <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
+        <texturenofocus border="28">pill56_idle.png</texturenofocus>
+        <onup>518</onup>
+        <ondown>500</ondown>
+        <onleft>518</onleft>
+        <onright>518</onright>
+        <visible>!String.IsEmpty(Window.Property(silo.can_shuffle))</visible>
+      </control>
+    </control>
     <control type="panel" id="500">
       <left>40</left>
       <top>270</top>
