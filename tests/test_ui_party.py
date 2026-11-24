@@ -628,9 +628,128 @@ class PickerTests(unittest.TestCase):
         self.app.dialog.select.side_effect = [0, 0]
         choice = ui_party.pick_title(self.app, FakeSession(), "Choose a title")
         self.app.client.search.assert_called_once_with("found", limit=40)
-        self.assertEqual(self.app.dialog.select.call_args.args[1], ["Found (2020)"])
+        self.assertEqual([(entry.label, entry.label2) for entry in self.app.dialog.select.call_args.args[1]],
+                         [("Found (2020)", "")])
         self.assertEqual(choice, {"content_id": "movie:8", "content_type": "movie", "title": "Found",
                                   "subtitle": "2020"})
+
+
+ANA = {"user_id": "7", "profile_id": "p7", "display_name": "Ana"}
+BEN = {"user_id": "7", "profile_id": "p8", "display_name": "Ben"}
+KIM = {"user_id": "9", "profile_id": "p9", "display_name": " "}
+
+
+def watch(member, state, position=None):
+    entry = {"user_id": member["user_id"], "profile_id": member["profile_id"], "state": state,
+             "on_watchlist": False}
+    if position is not None:
+        entry["position_seconds"] = position
+    return entry
+
+
+class MemberStateTests(unittest.TestCase):
+    """Who in the party has seen a title, from the room's member-state read."""
+
+    def setUp(self):
+        self.app, patcher = application()
+        self.addCleanup(patcher.stop)
+
+    def window(self, session, support):
+        window = ui_party.LobbyWindow("SiloParty.xml", ".")
+        window.application, window.session, window.declined = self.app, session, set()
+        window.support = dict(FULL, **support)
+        return window
+
+    def test_names_are_listed_as_android_words_them(self):
+        self.assertEqual(ui_party.name_list([]), "")
+        self.assertEqual(ui_party.name_list(["Ana"]), "Ana")
+        self.assertEqual(ui_party.name_list(["Ana", "Ben"]), "Ana and Ben")
+        self.assertEqual(ui_party.name_list(["Ana", "Ben", "Kim"]), "Ana, Ben, and Kim")
+        self.assertEqual(ui_party.name_list(["Ana", "Ben", "Kim", "Lee"]), "Ana, Ben, and 2 others")
+        self.assertEqual(ui_party.name_list(["Ana", "Ben", "Kim", "Lee", "Max"]), "Ana, Ben, and 3 others")
+
+    def test_a_title_says_who_has_seen_it_and_who_is_part_way(self):
+        state = {"members": [ANA, BEN, KIM], "items": [
+            {"content_id": "movie:1", "members": [watch(ANA, "watched"), watch(BEN, "in_progress", 1200.0),
+                                                  watch(KIM, "watched")]},
+            {"content_id": "series:2", "members": [watch(BEN, "in_progress")]},  # A series has no position.
+            {"content_id": "movie:3", "members": [watch(ANA, "unseen"), watch(BEN, "unseen", 0)]},
+            {"content_id": "movie:4", "members": [watch({"user_id": "1", "profile_id": "gone"}, "watched")]}]}
+        # Unseen titles say nothing, a member the answer doesn't name is left out, and a blank
+        # name reads Someone.
+        self.assertEqual(ui_party.seen_lines(state), {"movie:1": "Seen by Ana and Someone · Part way: Ben",
+                                                      "series:2": "Part way: Ben"})
+        self.assertEqual(ui_party.seen_lines({}), {})
+
+    def test_the_lobby_adds_who_has_seen_the_staged_title_and_asks_again_when_someone_joins(self):
+        session = FakeSession({"selected_content_id": "movie:1", "members": [dict(ANA, is_host=True),
+                                                                             dict(BEN, is_self=True)]})
+        window = self.window(session, {"member_state": True})
+        state = {"members": [ANA, BEN], "items": [{"content_id": "movie:1", "members": [watch(ANA, "watched")]}]}
+        with patch.object(ui_party.svc_party, "member_state", return_value=state) as read:
+            window.update()
+            window.update()
+            meta = ui_party.LobbyWindow.meta(self.app.client.item.return_value)
+            self.assertEqual(window.properties["silo.meta"], meta + " · Seen by Ana")
+            read.assert_called_once_with(self.app.client, "r1", "eyJ.proof", ["movie:1"])
+            session.room["members"] = session.room["members"] + [KIM]
+            window.update()
+            self.assertEqual(read.call_count, 2)
+
+    def test_the_lobby_line_needs_the_servers_member_state(self):
+        session = FakeSession({"selected_content_id": "movie:1"})
+        window = self.window(session, {"member_state": False})
+        with patch.object(ui_party.svc_party, "member_state") as read:
+            window.update()
+        read.assert_not_called()
+        self.assertEqual(window.properties["silo.meta"], ui_party.LobbyWindow.meta(self.app.client.item.return_value))
+        failing = self.window(session, {"member_state": True})
+        with patch.object(ui_party.svc_party, "member_state", side_effect=ApiError(503, "Unavailable")):
+            failing.update()
+        self.assertEqual(failing.properties["silo.meta"], window.properties["silo.meta"])
+
+    def test_the_picker_and_search_rows_say_who_has_seen_each_title_in_one_read(self):
+        shared = {"continue_together": [
+            {"item": {"content_id": "series:1", "type": "series", "title": "Example Show"}, "members": [],
+             "next_up": {"content_id": "episode:12", "season_number": 1, "episode_number": 2, "title": "Second"}}],
+            "watchlist_union": [{"item": {"content_id": "movie:5", "type": "movie", "title": "Watchlisted"},
+                                 "members": []}]}
+        state = {"members": [ANA, BEN], "items": [
+            {"content_id": "episode:12", "members": [watch(BEN, "in_progress", 60.0)]},
+            {"content_id": "movie:5", "members": [watch(ANA, "watched"), watch(BEN, "watched")]}]}
+        session = FakeSession()
+        session.support = dict(FULL, member_state=True)
+        self.app.dialog.select.return_value = -1
+        with patch.object(ui_party.svc_party, "picker", return_value=shared), \
+                patch.object(ui_party.svc_party, "member_state", return_value=state) as read:
+            ui_party.pick_title(self.app, session, "Suggest a title")
+        read.assert_called_once_with(self.app.client, "r1", "eyJ.proof", ["episode:12", "movie:5"])
+        self.assertEqual([entry.label2 for entry in self.app.dialog.select.call_args.args[1]],
+                         ["", "Continue Together · Part way: Ben", "On a watchlist · Seen by Ana and Ben"])
+        self.app.client.search.return_value = {"items": [
+            {"content_id": "movie:5", "type": "movie", "title": "Watchlisted"},
+            {"content_id": "movie:6", "type": "movie", "title": "Fresh"}]}
+        self.app.dialog.input.return_value = "watch"
+        self.app.dialog.select.side_effect = [0, -1]
+        with patch.object(ui_party.svc_party, "picker", return_value={}), \
+                patch.object(ui_party.svc_party, "member_state", return_value=state) as read:
+            ui_party.pick_title(self.app, session, "Suggest a title")
+        read.assert_called_once_with(self.app.client, "r1", "eyJ.proof", ["movie:5", "movie:6"])
+        self.assertEqual([(entry.label, entry.label2) for entry in self.app.dialog.select.call_args.args[1]],
+                         [("Watchlisted", "Seen by Ana and Ben"), ("Fresh", "")])
+        self.assertTrue(self.app.dialog.select.call_args.kwargs.get("useDetails"))
+
+    def test_the_picker_keeps_its_rows_when_member_state_fails(self):
+        shared = {"watchlist_union": [{"item": {"content_id": "movie:5", "type": "movie", "title": "Watchlisted"},
+                                       "members": []}]}
+        session = FakeSession()
+        session.support = dict(FULL, member_state=True)
+        self.app.dialog.select.return_value = -1
+        with patch.object(ui_party.svc_party, "picker", return_value=shared), \
+                patch.object(ui_party.svc_party, "member_state", side_effect=OSError("timed out")):
+            ui_party.pick_title(self.app, session, "Suggest a title")
+        self.assertEqual([entry.label2 for entry in self.app.dialog.select.call_args.args[1]],
+                         ["", "On a watchlist"])
 
 
 class InvitationTests(unittest.TestCase):

@@ -44,6 +44,7 @@
 - Join a party from the profile menu with its code or invite link, or rejoin your last one. Wait in the lobby and say you're ready, and watch in step with everyone. The host's play, pause and seek reach you; Back during the video offers Leave.
 - Host one from a title page (More → Watch Party), or start an empty one from the profile menu where you pick the title or everyone votes. Invite friends with the code or a QR code for their phones, start it for everyone, choose whether guests may play and pause, return everyone to the lobby, or end it.
 - In a vote, everyone suggests titles (from what the party is watching together, its watchlists, or a search) and votes; the host starts the leader or any other suggestion.
+- The lobby and the title lists say who in the party has seen a title or is part way through it.
 - Back in the lobby keeps the party open while you look around: the profile menu returns to it, and a title page offers Suggest to Party, Add to party (host) or Play for everyone (host, while it plays).
 - In a party everyone plays the room's file at normal speed, so Version, Speed and Up next are off. If your server can't play that file for this device, the party moves everyone to another version of it where the server offers that.
 - If this profile joins the party on another device, or the connection is lost, Founders Theater offers to rejoin.

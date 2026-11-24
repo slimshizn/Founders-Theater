@@ -4,7 +4,8 @@ Routes are Silo /api/v2: GET /watch-together/capabilities, POST /watch-together/
 ({"code"} or {"join_token"} -> {room, room_access_token}), POST /watch-together/rooms
 ({"room_id", "selection_mode"}), GET and DELETE /watch-together/rooms/{id}, POST
 .../ws-ticket, PUT .../staged-selection and .../selection, POST .../playback/start and
-.../playback/stop, PATCH .../policy and .../selection-mode, GET .../picker, the
+.../playback/stop, PATCH .../policy and .../selection-mode, GET .../picker, POST
+.../member-state, the
 suggestions (GET and POST .../suggestions, DELETE .../suggestions/{sid}, POST and
 DELETE .../suggestions/{sid}/vote, POST .../suggestions/promote) and POST
 .../source-fallback. A room's ``room_access_token`` (the room proof, a 24-hour JWT)
@@ -32,6 +33,7 @@ FALLBACK_FEATURE = "watch_party_source_fallback_v1"
 FALLBACK_REASONS = frozenset({"no_alternate_version", "hdr_transcode_unsupported",
                               "subtitle_conversion_unsupported", "transcoding_disabled"})
 SUGGESTION_TYPES = ("movie", "episode")
+MAX_MEMBER_STATE_IDS = 200  # The most titles one member-state read takes.
 JOIN_PATH = "/rooms/join"
 APP_LINK_HOST = "watch-party"
 
@@ -60,7 +62,7 @@ def normalize_code(text):
 
 def support(client):
     """What this server lets the profile do: {"guest", "host", "lobby_ready", "vote",
-    "mode_switch", "picker", "fallback"}.
+    "mode_switch", "picker", "fallback", "member_state"}.
 
     Joining needs the room socket (silo.room.v2, with the connection_replaced frame) and
     playback's watch_party_coordinator_v1 and fixed_media_file_v1, as Android requires;
@@ -69,7 +71,7 @@ def support(client):
     says so. Any failure supports nothing.
     """
     none = {"guest": False, "host": False, "lobby_ready": False, "vote": False, "mode_switch": False,
-            "picker": False, "fallback": False}
+            "picker": False, "fallback": False, "member_state": False}
     try:
         room = client.request("GET", BASE + "/capabilities")
         playback = client.request("GET", "/playback/capabilities")
@@ -85,7 +87,8 @@ def support(client):
             "vote": host and room.get("vote_host_override") is True,
             "mode_switch": host and room.get("selection_mode_switch") is True,
             "picker": guest and room.get("picker") is True,
-            "fallback": guest and FALLBACK_FEATURE in features}
+            "fallback": guest and FALLBACK_FEATURE in features,
+            "member_state": guest and room.get("member_state") is True}
 
 
 def join(client, code=None, join_token=None):
@@ -164,6 +167,22 @@ def select(client, room_id, content_id, file_id=None):
 def picker(client, room_id, token):
     """{"members", "continue_together", "watchlist_union"}: titles the room's members share."""
     response = client.request("GET", _room(_id(room_id)) + "/picker", headers={"X-Room-Token": token})
+    return response if isinstance(response, dict) else {}
+
+
+def member_state(client, room_id, token, content_ids):
+    """{"members", "items"}: what each connected member has watched of these titles (the
+    first 200 distinct ids), one item per title the caller may see. Each item's members
+    carry "state" (unseen, in_progress or watched), "position_seconds" and "on_watchlist"."""
+    ids = []
+    for content_id in content_ids or ():
+        content_id = "" if content_id is None else str(content_id).strip()
+        if content_id and content_id not in ids:
+            ids.append(content_id)
+    if not ids:
+        return {"members": [], "items": []}
+    response = client.request("POST", _room(_id(room_id)) + "/member-state",
+                              body={"content_ids": ids[:MAX_MEMBER_STATE_IDS]}, headers={"X-Room-Token": token})
     return response if isinstance(response, dict) else {}
 
 

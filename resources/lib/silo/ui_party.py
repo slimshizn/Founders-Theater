@@ -408,6 +408,63 @@ def party_choice(item, subtitle=None):
             "title": str(item.get("title") or item["content_id"]), "subtitle": subtitle}
 
 
+def name_list(names):
+    """"Ana", "Ana and Ben", "Ana, Ben, and Kim", "Ana, Ben, and 2 others", as Android lists them."""
+    if len(names) < 2:
+        return "".join(names)
+    if len(names) == 2:
+        return "{} and {}".format(*names)
+    if len(names) == 3:
+        return "{}, {}, and {}".format(*names)
+    return "{}, {}, and {} others".format(names[0], names[1], len(names) - 2)
+
+
+def seen_lines(state):
+    """{content_id: "Seen by Ana · Part way: Ben"} from a member-state answer, as Android's
+    lobby words it. A title nobody has started is left out, and so is a member the answer
+    doesn't name (unknown, not unseen). A blank name reads Someone."""
+    names = {}
+    for member in (state or {}).get("members") or ():
+        if isinstance(member, dict):
+            names[(str(member.get("user_id")), str(member.get("profile_id")))] = (
+                str(member.get("display_name") or "").strip() or "Someone")
+    lines = {}
+    for entry in (state or {}).get("items") or ():
+        if not isinstance(entry, dict) or not entry.get("content_id"):
+            continue
+        seen, part_way = [], []
+        for watch in entry.get("members") or ():
+            name = names.get((str(watch.get("user_id")), str(watch.get("profile_id")))) \
+                if isinstance(watch, dict) else None
+            if name is None:
+                continue
+            position = watch.get("position_seconds")
+            if watch.get("state") == "watched":
+                seen.append(name)
+            elif watch.get("state") == "in_progress" or (isinstance(position, (int, float))
+                                                         and not isinstance(position, bool) and position > 0):
+                part_way.append(name)
+        parts = (["Seen by " + name_list(seen)] if seen else []) + (
+            ["Part way: " + name_list(part_way)] if part_way else [])
+        if parts:
+            lines[str(entry["content_id"])] = " · ".join(parts)
+    return lines
+
+
+def seen_by(application, session, content_ids, support=None):
+    """seen_lines for these titles in one read; {} where the server has no member state
+    (``support``, else the session's) or the read fails."""
+    support = getattr(session, "support", None) if support is None else support
+    if session is None or not (support or {}).get("member_state"):
+        return {}
+    try:
+        return seen_lines(svc_party.member_state(application.client, session.room_id, session.token,
+                                                 list(content_ids)))
+    except (ApiError, OSError, ValueError):
+        _log("party_member_state_failed")
+        return {}
+
+
 def _picker_entries(entries, shelf):
     picked = []
     for entry in entries or ():
@@ -451,17 +508,20 @@ def pick_title(application, session, heading):
                 seen.add(key)
                 unique.append((label, shelf, choice))
         rows = unique
+    keys = [choice.get("content_id") or (choice.get("open") or {}).get("content_id") for _l, _s, choice in rows]
+    lines = seen_by(application, session, keys) if rows else {}
     entries = [xbmcgui.ListItem(label="Search for a title…")]
-    entries += [xbmcgui.ListItem(label=label, label2=shelf) for label, shelf, _choice in rows]
+    entries += [xbmcgui.ListItem(label=label, label2=" · ".join(part for part in (shelf, lines.get(key)) if part))
+                for (label, shelf, _choice), key in zip(rows, keys)]
     chosen = application.dialog.select(heading, entries, useDetails=True)
     if not isinstance(chosen, int) or chosen < 0 or chosen > len(rows):
         return None
     if chosen == 0:
-        return search_title(application, heading)
+        return search_title(application, heading, session)
     return _resolve(application, rows[chosen - 1][2])
 
 
-def search_title(application, heading):
+def search_title(application, heading, session=None):
     typed = application.dialog.input("Search for a title", type=xbmcgui.INPUT_ALPHANUM)
     if not (typed or "").strip():
         return None
@@ -471,12 +531,14 @@ def search_title(application, heading):
     if not items:
         application.dialog.ok(heading, "No titles match “{}”.".format(typed.strip()))
         return None
-    labels = []
+    lines = seen_by(application, session, [item["content_id"] for item in items])
+    entries = []
     for item in items:
         year = item.get("year")
-        labels.append(present.card_title(item) + (" ({})".format(year) if isinstance(year, int)
-                                                  and not isinstance(year, bool) and year > 0 else ""))
-    chosen = application.dialog.select(heading, labels)
+        label = present.card_title(item) + (" ({})".format(year) if isinstance(year, int)
+                                            and not isinstance(year, bool) and year > 0 else "")
+        entries.append(xbmcgui.ListItem(label=label, label2=lines.get(str(item["content_id"]), "")))
+    chosen = application.dialog.select(heading, entries, useDetails=bool(lines))
     if not isinstance(chosen, int) or not 0 <= chosen < len(items):
         return None
     item = items[chosen]
@@ -585,6 +647,7 @@ class LobbyWindow(xbmcgui.WindowXML):
         self.shown_members = None
         self.shown_suggestions = None
         self.suggestions = []
+        self.seen_key, self.seen_line = None, ""
         self.lock = threading.Lock()
 
     def onInit(self):
@@ -654,6 +717,8 @@ class LobbyWindow(xbmcgui.WindowXML):
         if item and item.get("title"):
             session.title = present.card_title(item)
         title, meta = self.heading(room, item, host, voting)
+        if item and item.get("title"):
+            meta = " · ".join(part for part in (meta, self.seen(room.get("selected_content_id"), members)) if part)
         lobby_open = phase == "lobby"
         if voting:
             primary = ("Start {}".format(suggestions[0]["title"]) if host and suggestions and lobby_open else
@@ -711,6 +776,16 @@ class LobbyWindow(xbmcgui.WindowXML):
             return "Pick something to watch", "Friends can join now with the code. They'll see your pick the moment you choose."
         return ("Waiting for {}".format(_host_name(room)),
                 "{} is choosing what to watch. You'll see it here the moment they do.".format(_host_name(room)))
+
+    def seen(self, content_id, members):
+        """Who has seen the staged title, read again when it changes or someone joins or leaves."""
+        key = (content_id, tuple(sorted((str(member.get("user_id")), str(member.get("profile_id")))
+                                        for member in members if member.get("connected") is not False)))
+        if key != self.seen_key:
+            self.seen_key = key
+            self.seen_line = seen_by(self.application, self.session, [content_id],
+                                     self.support).get(str(content_id), "")
+        return self.seen_line
 
     def status(self, room, members, host, voting, suggestions):
         if not self.session.connected:

@@ -45,7 +45,13 @@ class SupportTests(unittest.TestCase):
     def test_a_full_server_lets_this_profile_join_and_host(self):
         self.assertEqual(svc_party.support(self.client(capabilities())),
                          {"guest": True, "host": True, "lobby_ready": True, "vote": False, "mode_switch": False,
-                          "picker": False, "fallback": False})
+                          "picker": False, "fallback": False, "member_state": False})
+
+    def test_member_state_follows_its_flag_for_anyone_who_can_join(self):
+        self.assertTrue(svc_party.support(self.client(capabilities(member_state=True)))["member_state"])
+        guest_only = svc_party.support(self.client(capabilities(member_state=True, staged_selection=False)))
+        self.assertTrue(guest_only["member_state"])
+        self.assertFalse(svc_party.support(self.client(capabilities(member_state=True, allowed=False)))["member_state"])
 
     def test_voting_mode_switching_the_picker_and_fallback_follow_their_flags(self):
         room = capabilities(vote_host_override=True, selection_mode_switch=True, picker=True)
@@ -74,7 +80,7 @@ class SupportTests(unittest.TestCase):
         client = FakeClient({("GET", "/watch-together/capabilities"): ApiError(404, "Not found")})
         self.assertEqual(svc_party.support(client), {"guest": False, "host": False, "lobby_ready": False,
                                                      "vote": False, "mode_switch": False, "picker": False,
-                                                     "fallback": False})
+                                                     "fallback": False, "member_state": False})
 
 
 class CallTests(unittest.TestCase):
@@ -202,6 +208,18 @@ class VotingTests(unittest.TestCase):
         client = FakeClient({("GET", self.PATH + "/picker"): rows})
         self.assertEqual(svc_party.picker(client, "r1", "eyJ.a"), rows)
         self.assertEqual(client.calls[-1][3], {"X-Room-Token": "eyJ.a"})
+
+    def test_member_state_reads_the_named_titles_with_the_room_proof(self):
+        answer = {"members": [], "items": []}
+        client = FakeClient({("POST", self.PATH + "/member-state"): answer})
+        self.assertEqual(svc_party.member_state(client, "r1", "eyJ.a", ["movie:1", "", "movie:1", 7, None]), answer)
+        self.assertEqual(client.calls[-1][1:], (self.PATH + "/member-state", {"content_ids": ["movie:1", "7"]},
+                                                {"X-Room-Token": "eyJ.a"}))
+        svc_party.member_state(client, "r1", "eyJ.a", ["movie:{}".format(n) for n in range(250)])
+        self.assertEqual(len(client.calls[-1][2]["content_ids"]), 200)  # The most one read takes.
+        calls = len(client.calls)
+        self.assertEqual(svc_party.member_state(client, "r1", "eyJ.a", ["", None]), {"members": [], "items": []})
+        self.assertEqual(len(client.calls), calls)  # Nothing to ask about.
 
     def test_source_fallback_names_the_revision_file_and_reason(self):
         answer = {"room": dict(ROOM, selection_revision=4), "room_access_token": "eyJ.f"}
