@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="script.founderstheater" name="Founders Theater" version="1.1.0" provider-name="slimshizn">
+<addon id="script.founderstheater" name="Founders Theater" version="1.1.1" provider-name="slimshizn">
   <requires>
     <import addon="xbmc.python" version="3.0.1" />
     <import addon="xbmc.gui" version="5.17.0" />
@@ -14,16 +14,14 @@
     <disclaimer lang="en_GB">Founders Theater is not made or endorsed by the Silo project. Select HDR and Dolby Vision settings that your device and display support.</disclaimer>
     <license>AGPL-3.0-or-later</license>
     <platform>all</platform>
-    <news>v1.1.0 (2026-11-24)
-- Watch Party, where your Silo server offers it: join with a code from the profile menu, or host one from a title page's More menu, and watch in step with everyone.
-- Movie and series pages show the collections that hold them.
-- A collection's page can be sorted, filtered and shuffled.
-- Series and season pages offer Start over, Version, Audio and Subtitles for the episode up next.
-- OK on an episode plays it; hold OK to mark it watched or a favorite, or to open its page. The episode row runs on into the next and previous season.
-- Hold OK on a title card to mark it watched or add it to your watchlist or favorites, and on Continue Watching to play or resume it.
-- Search says where Kodi's keyboard takes speech: hold OK on Android, or Return on a Mac.
-- Play next still starts the next episode when the file ends during the Up next countdown.
-- The FT icon in the top-left corner of every screen and on the website.</news>
+    <news>v1.1.1 (2026-11-24)
+- Watch Party: start one from the profile menu where you pick the title or everyone votes. Everyone suggests titles and votes, and the host starts the leader or any other suggestion.
+- Invite friends with the Watch Party's code or a QR code, or join with an invite link.
+- Back in the lobby keeps the Watch Party open: the profile menu returns to it, and a title page offers Suggest to Party, Add to party or Play for everyone.
+- Rejoin a Watch Party after this profile joins it on another device or the connection is lost, or rejoin your last one from the profile menu.
+- If your server can't play a Watch Party's file for this device, the party moves everyone to another version of it where the server offers that.
+- The Watch Party lobby and title lists say who in the party has seen a title or is part way through it.
+- The profile menu leaves out Watchlist, Favorites and History, which For You already has.</news>
     <assets>
       <icon>resources/icon.png</icon>
     </assets>
