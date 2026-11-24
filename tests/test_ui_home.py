@@ -977,10 +977,22 @@ class ProfileMenuTests(unittest.TestCase):
 
     def test_watch_party_opens_its_screen(self):
         window = open_window()
+        window.application.party_session = None
         window.onClick(ui_home.AVATAR)
+        self.assertEqual(window.properties["silo.party_label"], "Watch Party")
         window.onClick(618)
         window.application.open_screen.assert_called_once_with("watch_party")
         self.assertEqual(window.focus, ui_home.AVATAR)
+
+    def test_an_open_watch_party_is_returned_to_from_the_menu(self):
+        window = open_window()
+        window.application.party_session = MagicMock(ended=None)
+        window.onClick(ui_home.AVATAR)
+        self.assertEqual(window.properties["silo.party_label"], "Return to the Watch Party")
+        window.application.party_session.ended = "host_left"
+        window.close_menu()
+        window.onClick(ui_home.AVATAR)
+        self.assertEqual(window.properties["silo.party_label"], "Watch Party")
 
     def test_switch_server_result(self):
         window = open_window()
@@ -1491,8 +1503,8 @@ class SkinTests(unittest.TestCase):
     def test_menu_rows_are_in_android_order(self):
         menu = next(control for control in self.tree.iter("control") if control.get("id") == "600")
         labels = [button.findtext("label") for button in menu.iter("control") if button.get("type") == "button"]
-        self.assertEqual(labels, ["Switch profile", "Watch Party", "Settings", "Edit home rows", "Switch server",
-                                  "Sign out"])
+        self.assertEqual(labels, ["Switch profile", "$INFO[Window.Property(silo.party_label)]", "Settings",
+                                  "Edit home rows", "Switch server", "Sign out"])
 
     def control(self, control_id):
         return next(control for control in self.tree.iter("control") if control.get("id") == str(control_id))

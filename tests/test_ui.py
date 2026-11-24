@@ -729,6 +729,17 @@ class ApplicationFlowTests(unittest.TestCase):
                      "/catalog/box-sets/1241", "/catalog/items/movie:1/box-set"):
             self.assertEqual(client._with_artwork("GET", path, None).get("image_size"), "large", path)
 
+    def test_exiting_leaves_a_watch_party_left_open(self):
+        session = MagicMock(ended=None)
+        self.app.party_session = session
+        self.app.store = None
+        leave = MagicMock()
+        screens = types.SimpleNamespace(leave_open_party=leave)
+        with patch.object(application_module, "SessionStore", side_effect=application_module.StorageError("x")), \
+                patch.dict(sys.modules, {"resources.lib.silo.ui_party": screens}):
+            self.app.run()
+        leave.assert_called_once_with(self.app)
+
     def test_session_storage_failure_is_shown_inside_startup_error_handler(self):
         self.app.store = None
         with patch.object(application_module, "SessionStore", side_effect=application_module.StorageError("Cannot read session")):

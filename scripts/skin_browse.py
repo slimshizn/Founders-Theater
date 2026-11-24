@@ -326,9 +326,17 @@ def first_visible(direction, targets):
                    for target in targets)
 
 
+PARTY_BUTTONS = ((200, "silo.primary_label"), (203, "silo.suggest_label"), (204, "silo.mode_label"),
+                 (205, "silo.invite_label"), (202, "silo.policy_label"), (201, "silo.leave_label"))
+
+
 def party_window():
-    """The Watch Party lobby (ui_party.LobbyWindow): the title, the join code, who is here,
-    and the buttons, Ready or Start (200), who may play and pause (202), Leave or End (201)."""
+    """The Watch Party lobby (ui_party.LobbyWindow): the title or the vote, the join code,
+    who is here, the suggestions (301) in a vote, and a column of buttons that closes up
+    around the hidden ones: Ready or Start (200), Suggest or Choose a title (203), the
+    selection mode (204), Invite friends (205), who may play and pause (202), Leave or End
+    (201)."""
+    voting = has("silo.voting")
     backdrop = [
         image(691, 0, 1229, 756, "$INFO[{}]".format(prop("silo.backdrop")), diffuse="mask_hero.png",
               aspect="scale", fade=400, background=True, condition=has("silo.backdrop")),
@@ -337,42 +345,66 @@ def party_window():
     text = [
         label(88, 120, 1100, 40, "WATCH PARTY", "font12", SECONDARY),
         label(88, 160, 1100, 72, "$INFO[{}]".format(prop("silo.title")), "font52_title", TEXT, scroll=True),
-        label(88, 232, 1100, 40, "$INFO[{}]".format(prop("silo.meta")), "font12", SECONDARY),
+        label(88, 232, 1100, 40, "$INFO[{}]".format(prop("silo.meta")), "font12", SECONDARY, scroll=True),
         label(88, 288, 1100, 44, "$INFO[{}]".format(prop("silo.status")), "font27", TEXT),
         label(1260, 120, 572, 40, "Join code", "font12", SECONDARY, "right"),
         label(1260, 160, 572, 72, "$INFO[{}]".format(prop("silo.code")), "font52_title", TEXT, "right"),
-        label(88, 372, 900, 40, "$INFO[{}]".format(prop("silo.members_heading")), "font25_title", SECONDARY),
+        label(88, 372, 900, 40, "$INFO[{}]".format(prop("silo.members_heading")), "font25_title", SECONDARY,
+              condition="!" + voting),
+        label(88, 372, 900, 40, "$INFO[{}]".format(prop("silo.suggestions_heading")), "font25_title", SECONDARY,
+              condition=voting),
+        label(88, 892, 900, 88, "$INFO[{}]".format(prop("silo.member_line")), "font12", SECONDARY,
+              kind="textbox", aligny="top", condition=voting),
     ]
 
-    def member(tag, focused):
+    def row(list_id, tag, focused):
         parts = ['<{} width="900" height="64">'.format(tag)]
         if focused:
-            parts.append(image(0, 4, 900, 56, "white.png", color="1FFFFFFF", condition="Control.HasFocus(300)"))
-        parts += [label(24, 0, 600, 64, "$INFO[ListItem.Label]", "font27", TEXT),
+            parts.append(image(0, 4, 900, 56, "white.png", color="1FFFFFFF",
+                               condition="Control.HasFocus({})".format(list_id)))
+        parts += [label(24, 0, 600, 64, "$INFO[ListItem.Label]", "font27", TEXT, scroll=focused),
                   label(624, 0, 252, 64, "$INFO[ListItem.Label2]", "font12", SECONDARY, "right"),
                   "</{}>".format(tag)]
         return "".join(parts)
 
-    members = ('<control type="list" id="300">' + rect(88, 420, 900, 576)
-               + "<orientation>vertical</orientation><onup>300</onup><ondown>300</ondown><onleft>300</onleft>"
-               + first_visible("onright", (200, 202, 201)) + member("itemlayout", False)
-               + member("focusedlayout", True) + "</control>")
-    buttons = [
-        button(200, 1260, 420, 572, 64, "$INFO[{}]".format(prop("silo.primary_label")),
-               navigation="<onup>200</onup>" + first_visible("ondown", (202, 201)) + "<onleft>300</onleft>"
-                          "<onright>200</onright>", condition=has("silo.primary_label")),
-        button(202, 1260, 500, 572, 64, "$INFO[{}]".format(prop("silo.policy_label")),
-               navigation=first_visible("onup", (200,)) + "<onup>202</onup><ondown>201</ondown><onleft>300</onleft>"
-                          "<onright>202</onright>", condition=has("silo.policy_label")),
-        button(201, 1260, 580, 572, 64, "$INFO[{}]".format(prop("silo.leave_label")),
-               navigation=first_visible("onup", (202, 200)) + "<onup>201</onup><ondown>201</ondown>"
-                          "<onleft>300</onleft><onright>201</onright>"),
-    ]
-    return document(backdrop + text + [members] + buttons + [top_bar()], 200)
+    def rows(list_id, height, condition):
+        return ('<control type="list" id="{}">'.format(list_id) + rect(88, 420, 900, height)
+                + "<orientation>vertical</orientation><onup>{0}</onup><ondown>{0}</ondown><onleft>{0}</onleft>"
+                  "<onright>250</onright>".format(list_id)
+                + row(list_id, "itemlayout", False) + row(list_id, "focusedlayout", True)
+                + visible(condition) + "</control>")
+
+    buttons = "".join(
+        button(control_id, 0, 0, 572, 64, "$INFO[{}]".format(prop(key)),
+               navigation=first_visible("onleft", (301, 300)), condition=has(key) if control_id != 201 else None)
+        for control_id, key in PARTY_BUTTONS)
+    column = ('<control type="grouplist" id="250">' + rect(1260, 420, 572, 576)
+              + "<orientation>vertical</orientation><itemgap>16</itemgap>"
+              + first_visible("onleft", (301, 300)) + buttons + "</control>")
+    return document(backdrop + text + [rows(300, 576, "!" + voting), rows(301, 448, voting), column, top_bar()],
+                    200)
+
+
+def party_invite_window():
+    """The Watch Party invitation (ui_party.InviteWindow): the join code and, for the host,
+    a QR code of the invitation link for a phone (Android's invite page). Done is 100."""
+    qr = has("silo.qr")
+    return document([
+        image(0, 0, 1920, 1080, "white.png", color="E6000000"),
+        label(240, 300, 800, 40, "INVITE FRIENDS", "font12", SECONDARY),
+        label(240, 340, 800, 72, "Join with this code", "font52_title", TEXT),
+        label(240, 424, 760, 96, "Anyone with a profile on this Silo server can enter it from Watch Party.",
+              "font27", SECONDARY, kind="textbox", aligny="top"),
+        label(240, 540, 800, 96, "$INFO[{}]".format(prop("silo.code")), "font52_title", TEXT),
+        label(240, 644, 760, 48, "Or scan to open the invitation on a phone.", "font12", SECONDARY, condition=qr),
+        button(100, 240, 724, 320, 64, "Done", navigation=nav(100)),
+        image(1120, 240, 600, 600, "white.png", condition=qr),
+        image(1140, 260, 560, 560, "$INFO[{}]".format(prop("silo.qr")), aspect="keep", condition=qr),
+    ], 100)
 
 
 WINDOWS = {"SiloBrowseRows.xml": rows_window, "SiloBrowseGrid.xml": grid_window, "SiloPerson.xml": person_window,
-           "SiloParty.xml": party_window}
+           "SiloParty.xml": party_window, "SiloPartyInvite.xml": party_invite_window}
 
 
 def main():

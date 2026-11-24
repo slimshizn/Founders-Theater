@@ -438,6 +438,10 @@ class HomeWindow(xbmcgui.WindowXML):
     def open_menu(self):
         locked = self.locked()
         self.setProperty("silo.profile_locked", "true" if locked else "")
+        # Watch Party returns to a party still open in the background (ui_party.current).
+        party = getattr(self.application, "party_session", None)
+        self.setProperty("silo.party_label", "Return to the Watch Party"
+                         if party is not None and getattr(party, "ended", None) is None else "Watch Party")
         self.getControl(610).setVisible(not locked)
         shown = [control for control in MENU_ORDER if not (locked and control == 610)]
         for index, control in enumerate(shown):

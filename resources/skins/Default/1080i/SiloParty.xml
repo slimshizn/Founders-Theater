@@ -64,6 +64,7 @@
       <textcolor>BFEDEDED</textcolor>
       <align>left</align>
       <aligny>center</aligny>
+      <scroll>true</scroll>
       <label>$INFO[Window.Property(silo.meta)]</label>
     </control>
     <control type="label">
@@ -109,6 +110,31 @@
       <align>left</align>
       <aligny>center</aligny>
       <label>$INFO[Window.Property(silo.members_heading)]</label>
+      <visible>!!String.IsEmpty(Window.Property(silo.voting))</visible>
+    </control>
+    <control type="label">
+      <left>88</left>
+      <top>372</top>
+      <width>900</width>
+      <height>40</height>
+      <font>font25_title</font>
+      <textcolor>BFEDEDED</textcolor>
+      <align>left</align>
+      <aligny>center</aligny>
+      <label>$INFO[Window.Property(silo.suggestions_heading)]</label>
+      <visible>!String.IsEmpty(Window.Property(silo.voting))</visible>
+    </control>
+    <control type="textbox">
+      <left>88</left>
+      <top>892</top>
+      <width>900</width>
+      <height>88</height>
+      <font>font12</font>
+      <textcolor>BFEDEDED</textcolor>
+      <align>left</align>
+      <aligny>top</aligny>
+      <label>$INFO[Window.Property(silo.member_line)]</label>
+      <visible>!String.IsEmpty(Window.Property(silo.voting))</visible>
     </control>
     <control type="list" id="300">
       <left>88</left>
@@ -119,9 +145,7 @@
       <onup>300</onup>
       <ondown>300</ondown>
       <onleft>300</onleft>
-      <onright condition="Control.IsVisible(200)">200</onright>
-      <onright condition="Control.IsVisible(202)">202</onright>
-      <onright condition="Control.IsVisible(201)">201</onright>
+      <onright>250</onright>
       <itemlayout width="900" height="64">
         <control type="label">
           <left>24</left>
@@ -164,6 +188,7 @@
           <textcolor>FFEDEDED</textcolor>
           <align>left</align>
           <aligny>center</aligny>
+          <scroll>true</scroll>
           <label>$INFO[ListItem.Label]</label>
         </control>
         <control type="label">
@@ -178,66 +203,187 @@
           <label>$INFO[ListItem.Label2]</label>
         </control>
       </focusedlayout>
+      <visible>!!String.IsEmpty(Window.Property(silo.voting))</visible>
     </control>
-    <control type="button" id="200">
+    <control type="list" id="301">
+      <left>88</left>
+      <top>420</top>
+      <width>900</width>
+      <height>448</height>
+      <orientation>vertical</orientation>
+      <onup>301</onup>
+      <ondown>301</ondown>
+      <onleft>301</onleft>
+      <onright>250</onright>
+      <itemlayout width="900" height="64">
+        <control type="label">
+          <left>24</left>
+          <top>0</top>
+          <width>600</width>
+          <height>64</height>
+          <font>font27</font>
+          <textcolor>FFEDEDED</textcolor>
+          <align>left</align>
+          <aligny>center</aligny>
+          <label>$INFO[ListItem.Label]</label>
+        </control>
+        <control type="label">
+          <left>624</left>
+          <top>0</top>
+          <width>252</width>
+          <height>64</height>
+          <font>font12</font>
+          <textcolor>BFEDEDED</textcolor>
+          <align>right</align>
+          <aligny>center</aligny>
+          <label>$INFO[ListItem.Label2]</label>
+        </control>
+      </itemlayout>
+      <focusedlayout width="900" height="64">
+        <control type="image">
+          <left>0</left>
+          <top>4</top>
+          <width>900</width>
+          <height>56</height>
+          <texture colordiffuse="1FFFFFFF">white.png</texture>
+          <visible>Control.HasFocus(301)</visible>
+        </control>
+        <control type="label">
+          <left>24</left>
+          <top>0</top>
+          <width>600</width>
+          <height>64</height>
+          <font>font27</font>
+          <textcolor>FFEDEDED</textcolor>
+          <align>left</align>
+          <aligny>center</aligny>
+          <scroll>true</scroll>
+          <label>$INFO[ListItem.Label]</label>
+        </control>
+        <control type="label">
+          <left>624</left>
+          <top>0</top>
+          <width>252</width>
+          <height>64</height>
+          <font>font12</font>
+          <textcolor>BFEDEDED</textcolor>
+          <align>right</align>
+          <aligny>center</aligny>
+          <label>$INFO[ListItem.Label2]</label>
+        </control>
+      </focusedlayout>
+      <visible>!String.IsEmpty(Window.Property(silo.voting))</visible>
+    </control>
+    <control type="grouplist" id="250">
       <left>1260</left>
       <top>420</top>
       <width>572</width>
-      <height>64</height>
-      <label>$INFO[Window.Property(silo.primary_label)]</label>
-      <font>font25_title</font>
-      <textcolor>FFEDEDED</textcolor>
-      <focusedcolor>FF000000</focusedcolor>
-      <align>center</align>
-      <aligny>center</aligny>
-      <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
-      <texturenofocus border="28">pill56_idle.png</texturenofocus>
-      <onup>200</onup>
-      <ondown condition="Control.IsVisible(202)">202</ondown>
-      <ondown condition="Control.IsVisible(201)">201</ondown>
-      <onleft>300</onleft>
-      <onright>200</onright>
-      <visible>!String.IsEmpty(Window.Property(silo.primary_label))</visible>
-    </control>
-    <control type="button" id="202">
-      <left>1260</left>
-      <top>500</top>
-      <width>572</width>
-      <height>64</height>
-      <label>$INFO[Window.Property(silo.policy_label)]</label>
-      <font>font25_title</font>
-      <textcolor>FFEDEDED</textcolor>
-      <focusedcolor>FF000000</focusedcolor>
-      <align>center</align>
-      <aligny>center</aligny>
-      <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
-      <texturenofocus border="28">pill56_idle.png</texturenofocus>
-      <onup condition="Control.IsVisible(200)">200</onup>
-      <onup>202</onup>
-      <ondown>201</ondown>
-      <onleft>300</onleft>
-      <onright>202</onright>
-      <visible>!String.IsEmpty(Window.Property(silo.policy_label))</visible>
-    </control>
-    <control type="button" id="201">
-      <left>1260</left>
-      <top>580</top>
-      <width>572</width>
-      <height>64</height>
-      <label>$INFO[Window.Property(silo.leave_label)]</label>
-      <font>font25_title</font>
-      <textcolor>FFEDEDED</textcolor>
-      <focusedcolor>FF000000</focusedcolor>
-      <align>center</align>
-      <aligny>center</aligny>
-      <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
-      <texturenofocus border="28">pill56_idle.png</texturenofocus>
-      <onup condition="Control.IsVisible(202)">202</onup>
-      <onup condition="Control.IsVisible(200)">200</onup>
-      <onup>201</onup>
-      <ondown>201</ondown>
-      <onleft>300</onleft>
-      <onright>201</onright>
+      <height>576</height>
+      <orientation>vertical</orientation>
+      <itemgap>16</itemgap>
+      <onleft condition="Control.IsVisible(301)">301</onleft>
+      <onleft condition="Control.IsVisible(300)">300</onleft>
+      <control type="button" id="200">
+        <left>0</left>
+        <top>0</top>
+        <width>572</width>
+        <height>64</height>
+        <label>$INFO[Window.Property(silo.primary_label)]</label>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>center</align>
+        <aligny>center</aligny>
+        <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
+        <texturenofocus border="28">pill56_idle.png</texturenofocus>
+        <onleft condition="Control.IsVisible(301)">301</onleft>
+        <onleft condition="Control.IsVisible(300)">300</onleft>
+        <visible>!String.IsEmpty(Window.Property(silo.primary_label))</visible>
+      </control>
+      <control type="button" id="203">
+        <left>0</left>
+        <top>0</top>
+        <width>572</width>
+        <height>64</height>
+        <label>$INFO[Window.Property(silo.suggest_label)]</label>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>center</align>
+        <aligny>center</aligny>
+        <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
+        <texturenofocus border="28">pill56_idle.png</texturenofocus>
+        <onleft condition="Control.IsVisible(301)">301</onleft>
+        <onleft condition="Control.IsVisible(300)">300</onleft>
+        <visible>!String.IsEmpty(Window.Property(silo.suggest_label))</visible>
+      </control>
+      <control type="button" id="204">
+        <left>0</left>
+        <top>0</top>
+        <width>572</width>
+        <height>64</height>
+        <label>$INFO[Window.Property(silo.mode_label)]</label>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>center</align>
+        <aligny>center</aligny>
+        <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
+        <texturenofocus border="28">pill56_idle.png</texturenofocus>
+        <onleft condition="Control.IsVisible(301)">301</onleft>
+        <onleft condition="Control.IsVisible(300)">300</onleft>
+        <visible>!String.IsEmpty(Window.Property(silo.mode_label))</visible>
+      </control>
+      <control type="button" id="205">
+        <left>0</left>
+        <top>0</top>
+        <width>572</width>
+        <height>64</height>
+        <label>$INFO[Window.Property(silo.invite_label)]</label>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>center</align>
+        <aligny>center</aligny>
+        <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
+        <texturenofocus border="28">pill56_idle.png</texturenofocus>
+        <onleft condition="Control.IsVisible(301)">301</onleft>
+        <onleft condition="Control.IsVisible(300)">300</onleft>
+        <visible>!String.IsEmpty(Window.Property(silo.invite_label))</visible>
+      </control>
+      <control type="button" id="202">
+        <left>0</left>
+        <top>0</top>
+        <width>572</width>
+        <height>64</height>
+        <label>$INFO[Window.Property(silo.policy_label)]</label>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>center</align>
+        <aligny>center</aligny>
+        <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
+        <texturenofocus border="28">pill56_idle.png</texturenofocus>
+        <onleft condition="Control.IsVisible(301)">301</onleft>
+        <onleft condition="Control.IsVisible(300)">300</onleft>
+        <visible>!String.IsEmpty(Window.Property(silo.policy_label))</visible>
+      </control>
+      <control type="button" id="201">
+        <left>0</left>
+        <top>0</top>
+        <width>572</width>
+        <height>64</height>
+        <label>$INFO[Window.Property(silo.leave_label)]</label>
+        <font>font25_title</font>
+        <textcolor>FFEDEDED</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <align>center</align>
+        <aligny>center</aligny>
+        <texturefocus colordiffuse="FFEDEDED" border="28">pill56.png</texturefocus>
+        <texturenofocus border="28">pill56_idle.png</texturenofocus>
+        <onleft condition="Control.IsVisible(301)">301</onleft>
+        <onleft condition="Control.IsVisible(300)">300</onleft>
+      </control>
     </control>
     <control type="group" id="100">
       <left>0</left>

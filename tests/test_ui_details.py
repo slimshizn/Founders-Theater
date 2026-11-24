@@ -1084,31 +1084,48 @@ class NextUpControlsTests(unittest.TestCase):
 
 
 class WatchPartyEntryTests(unittest.TestCase):
-    """More → Watch Party hosts a party with the title on screen (Android TvWatchPartyDetailEntry)."""
+    """More offers the Watch Party entries for the title on screen (Android TvWatchPartyDetailEntry):
+    ui_party.title_entries decides which (Watch Party, Add to party, Play for everyone or Suggest
+    to Party); the page asks for them through the application, with the server's support."""
 
     setUp = DetailsWindowTests.setUp
     window = DetailsWindowTests.window
     choose_more = DetailsWindowTests.choose_more
     HOSTING = {"guest": True, "host": True, "lobby_ready": True}
 
-    def test_a_movie_page_hosts_the_movie_in_the_version_on_screen(self):
+    def entries(self, label="Watch Party"):
+        self.asked, self.ran = [], []
+
+        def open_screen(screen, **kwargs):
+            if screen != "party_entries":
+                return None
+            self.asked.append(kwargs)
+            return [(label, lambda: self.ran.append(label))] if label else []
+
+        self.app.open_screen.side_effect = open_screen
+
+    def test_a_movie_page_offers_the_movie_in_the_version_on_screen(self):
+        self.entries()
         with patch.object(ui_details.svc_party, "support", return_value=self.HOSTING):
             window = self.window(movie_item(multiple=True))
             window.onInit()
             self.choose_more(window, "Watch Party")
         self.assertEqual(self.menu[0], "Watch Party")
-        self.app.open_screen.assert_called_once_with("host_party", item=window.item, file_id="file-a")
+        self.assertEqual(self.ran, ["Watch Party"])
+        self.assertEqual(self.asked[-1], {"item": window.item, "file_id": "file-a", "support": self.HOSTING})
 
-    def test_a_series_page_hosts_its_next_up_episode(self):
+    def test_a_series_page_offers_its_next_up_episode(self):
+        self.entries("Suggest to Party")
         self.app.client.item.side_effect = lambda content_id, **params: next_up_detail(content_id)
         with patch.object(ui_details.svc_party, "support", return_value=self.HOSTING):
             window = self.window(series_item(), SEASONS)
             window.onInit()
-            self.choose_more(window, "Watch Party")
-        kwargs = self.app.open_screen.call_args.kwargs
-        self.assertEqual((kwargs["item"]["content_id"], kwargs["file_id"]), ("episode:1-2", "file-a"))
+            self.choose_more(window, "Suggest to Party")
+        self.assertEqual((self.asked[-1]["item"]["content_id"], self.asked[-1]["file_id"]), ("episode:1-2", "file-a"))
+        self.assertEqual(self.ran, ["Suggest to Party"])
 
-    def test_no_entry_where_this_profile_cannot_host(self):
+    def test_no_entry_when_there_is_none(self):
+        self.entries(None)
         with patch.object(ui_details.svc_party, "support", return_value=dict(self.HOSTING, host=False)):
             window = self.window(movie_item())
             window.onInit()

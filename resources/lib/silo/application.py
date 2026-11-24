@@ -94,6 +94,7 @@ class Application:
             xbmc.log("[Silo] Unexpected application error: " + error_location(exc), xbmc.LOGERROR)
             self.dialog.ok("Silo", "Silo could not continue. Check the Kodi log for diagnostics.")
         finally:
+            self.leave_party()
             if home is not None:
                 home.clearProperty("silo.running")
             if getattr(self, "_theme", None) is not None:
@@ -318,6 +319,8 @@ class Application:
                     continue
                 else:
                     continue
+            if action in ("server", "profile", "logout"):
+                self.leave_party()  # A party belongs to this profile on this server.
             if action == "server":
                 if self.switch_server():
                     self._run()
@@ -1177,7 +1180,17 @@ class Application:
         "subtitle_sync": ("ui_subtitles", "sync_subtitles"),
         "watch_party": ("ui_party", "open_party"),
         "host_party": ("ui_party", "host_party"),
+        "party_entries": ("ui_party", "title_entries"),
     }
+
+    def leave_party(self):
+        """Leave a Watch Party left open in the background: its room proof belongs to this
+        profile on this server, and the socket must not outlive the add-on."""
+        if getattr(self, "party_session", None) is None:
+            return
+        from .ui_party import leave_open_party
+
+        leave_open_party(self)
 
     def open_screen(self, screen, /, **kwargs):
         """Open another screen by name; returns whatever that screen returns.
