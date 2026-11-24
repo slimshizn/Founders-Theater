@@ -6,7 +6,9 @@ import time
 import unittest
 
 from resources.lib.silo import party, wsclient
-from resources.lib.silo.api import ApiError
+
+# The class party catches: other test modules import the api module again under their stubs.
+ApiError = party.ApiError
 
 ROOM = {"room_id": "r1", "phase": "lobby", "generation": 3, "self_role": "guest", "members": []}
 

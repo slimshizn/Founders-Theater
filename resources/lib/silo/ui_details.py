@@ -17,7 +17,7 @@ from urllib.parse import quote, urlsplit
 import xbmc
 import xbmcgui
 
-from . import present, svc_boxsets, svc_browse, svc_personal, svc_shuffle
+from . import present, svc_boxsets, svc_browse, svc_party, svc_personal, svc_shuffle
 from .api import ApiError
 from .present import is_unwatched, language_name
 from .media import (available_versions, default_version, format_time, is_multipart, resume_position,
@@ -362,6 +362,7 @@ class DetailsWindow(xbmcgui.WindowXML):
         # Server capabilities, read once per page when the More menu needs them.
         self.shuffle_kinds = None
         self.metadata_ai = None
+        self.party_support = None
         self.season_settle = Debouncer(self.season_settled, SEASON_SETTLE_SECONDS)
 
     # ------------------------------------------------------------ lifecycle
@@ -1270,6 +1271,17 @@ class DetailsWindow(xbmcgui.WindowXML):
             self.shuffle_kinds = [kind for kind in kinds or [] if isinstance(kind, str)]
         return kind in self.shuffle_kinds
 
+    def can_host_party(self):
+        if self.party_support is None:
+            try:
+                self.party_support = svc_party.support(self.application.client)
+            except Exception:  # Without the capability the menu just leaves Watch Party out.
+                self.party_support = {}
+        return bool(self.party_support.get("host"))
+
+    def host_party(self, item):
+        self.application.open_screen("host_party", item=item, file_id=self.selected_file_id)
+
     def can_translate(self):
         if not _text(self.item.get("pending_translation_language")):
             return False
@@ -1293,6 +1305,10 @@ class DetailsWindow(xbmcgui.WindowXML):
                             lambda: self.shuffle(season_id=season["content_id"])))
         if kind == "season" and self.can_shuffle("season"):
             actions.append(("Shuffle season", lambda: self.shuffle(season_id=content_id)))
+        # A series or season page hosts its next-up episode, in the version on screen.
+        party_item = self.target()
+        if party_item.get("type") in ("movie", "episode") and self.can_host_party():
+            actions.append(("Watch Party", lambda: self.host_party(party_item)))
         watched = svc_personal.state(item)["watched"]
         actions.append(("Mark as unwatched" if watched else "Mark as watched", self.toggle_watched))
         if season is not None:

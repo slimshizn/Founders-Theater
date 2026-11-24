@@ -1083,6 +1083,39 @@ class NextUpControlsTests(unittest.TestCase):
                 self.app.play_next.assert_called_once_with(window.item)
 
 
+class WatchPartyEntryTests(unittest.TestCase):
+    """More → Watch Party hosts a party with the title on screen (Android TvWatchPartyDetailEntry)."""
+
+    setUp = DetailsWindowTests.setUp
+    window = DetailsWindowTests.window
+    choose_more = DetailsWindowTests.choose_more
+    HOSTING = {"guest": True, "host": True, "lobby_ready": True}
+
+    def test_a_movie_page_hosts_the_movie_in_the_version_on_screen(self):
+        with patch.object(ui_details.svc_party, "support", return_value=self.HOSTING):
+            window = self.window(movie_item(multiple=True))
+            window.onInit()
+            self.choose_more(window, "Watch Party")
+        self.assertEqual(self.menu[0], "Watch Party")
+        self.app.open_screen.assert_called_once_with("host_party", item=window.item, file_id="file-a")
+
+    def test_a_series_page_hosts_its_next_up_episode(self):
+        self.app.client.item.side_effect = lambda content_id, **params: next_up_detail(content_id)
+        with patch.object(ui_details.svc_party, "support", return_value=self.HOSTING):
+            window = self.window(series_item(), SEASONS)
+            window.onInit()
+            self.choose_more(window, "Watch Party")
+        kwargs = self.app.open_screen.call_args.kwargs
+        self.assertEqual((kwargs["item"]["content_id"], kwargs["file_id"]), ("episode:1-2", "file-a"))
+
+    def test_no_entry_where_this_profile_cannot_host(self):
+        with patch.object(ui_details.svc_party, "support", return_value=dict(self.HOSTING, host=False)):
+            window = self.window(movie_item())
+            window.onInit()
+            self.choose_more(window, "nothing")
+        self.assertNotIn("Watch Party", self.menu)
+
+
 class EpisodeRailTests(unittest.TestCase):
     """The episode row runs on into the next and previous season (Android's episode carousel)."""
 

@@ -105,8 +105,10 @@ class RoomPlaybackTests(unittest.TestCase):
         self.assertEqual(self.tick(5.0, False), [])
 
     def test_leaving_playing_or_a_new_selection_stops_playback(self):
+        self.assertIsNone(self.binding.stopped)
         self.session.room["phase"] = "lobby"
         self.assertEqual(self.tick(5.0, False), [("stop", "lobby")])
+        self.assertEqual(self.binding.stopped, "lobby")  # The room loop reads why playback ended.
         self.session.room.update(phase="playing", selection_revision=3)
         self.assertEqual(self.tick(5.0, False), [("stop", "changed")])
         self.session.ended = "host_left"

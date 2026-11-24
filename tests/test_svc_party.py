@@ -5,7 +5,9 @@ import json
 import unittest
 
 from resources.lib.silo import svc_party
-from resources.lib.silo.api import ApiError
+
+# The class svc_party catches: other test modules import the api module again under their stubs.
+ApiError = svc_party.ApiError
 
 
 class FakeClient:
@@ -106,8 +108,8 @@ class CallTests(unittest.TestCase):
     def test_the_socket_url_and_the_proofs_expiry(self):
         self.assertEqual(svc_party.socket_url("https://silo.example/prefix", "r1"),
                          "wss://silo.example/prefix/api/v2/watch-together/rooms/r1/ws")
-        self.assertEqual(svc_party.socket_url("http://192.0.2.4:8096", "r1"),
-                         "ws://192.0.2.4:8096/api/v2/watch-together/rooms/r1/ws")
+        self.assertEqual(svc_party.socket_url("http://silo.example:8096", "r1"),
+                         "ws://silo.example:8096/api/v2/watch-together/rooms/r1/ws")
         self.assertEqual(svc_party.proof_expiry(proof(1795550400)), 1795550400)
         self.assertIsNone(svc_party.proof_expiry("not-a-token"))
 

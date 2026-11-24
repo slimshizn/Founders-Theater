@@ -67,6 +67,7 @@ class RoomPlayback:
         self.strikes = 0
         self.last_correction = None
         self.noticed = set()
+        self.stopped = None  # Why the room ended this playback ("lobby", "changed" or an ending).
 
     # ------------------------------------------------------------ helpers
     def attach(self, session_id):
@@ -92,15 +93,19 @@ class RoomPlayback:
         return position + max(0.0, server_now - executed) if playing else position
 
     # ------------------------------------------------------------ the tick
+    def _stop(self, reason):
+        self.stopped = reason
+        return [("stop", reason)]
+
     def tick(self, position, paused, stalled=False):
         now = self.mono()
         if self.session.ended is not None:
-            return [("stop", self.session.ended)]
+            return self._stop(self.session.ended)
         room = self.session.snapshot()
         if room.get("phase") != "playing":
-            return [("stop", "lobby" if room.get("phase") == "lobby" else "ended")]
+            return self._stop("lobby" if room.get("phase") == "lobby" else "ended")
         if room.get("selection_revision") != self.revision:
-            return [("stop", "changed")]
+            return self._stop("changed")
         if self.session_id and room.get("attached_session_id") != self.session_id \
                 and now - self.attached_at >= ATTACH_RETRY:
             self.attach(self.session_id)

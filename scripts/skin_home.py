@@ -26,8 +26,8 @@ TABS = (("home", "Home", 210, 215, 124), ("movies", "Movies", 211, 216, 148),
         ("series", "Series", 212, 217, 140), ("for_you", "For You", 203, 206, 156),
         ("calendar", "Calendar", 204, 207, 172), ("requests", "Requests", 205, 208, 172))
 SEARCH_CHIPS = ((530, "video", "All", 112), (531, "movie", "Movies", 150), (532, "series", "Series", 140))
-MENU_ITEMS = ((610, "Switch profile"), (613, "Watchlist"), (614, "Favorites"), (615, "History"),
-              (611, "Settings"), (616, "Edit home rows"), (617, "Switch server"), (612, "Sign out"))
+MENU_ITEMS = ((610, "Switch profile"), (618, "Watch Party"), (613, "Watchlist"), (614, "Favorites"),
+              (615, "History"), (611, "Settings"), (616, "Edit home rows"), (617, "Switch server"), (612, "Sign out"))
 # Top-bar panels (Android TvCascadeSelector / TvForYouSelector): they fade in a moment after a
 # tab takes focus and stay while focus is inside them. Python fills and places them.
 LIB_PANEL, LIB_PANEL_BG, LIB_LIST, LIB_EXIT = 645, 646, 650, 659

@@ -801,7 +801,7 @@ class Application:
         self._after_playback_item = (self._playback_item_key(item, file_id), detail)
 
     def play(self, item, resume=None, file_id=None, subtitle_index=AUTO, start_at=None, auto_next=True,
-             audio_index=AUTO, quality=None, transition=None, fresh=False):
+             audio_index=AUTO, quality=None, transition=None, fresh=False, party=None, party_menu=None):
         """Generic Play follows preferences; explicit Resume/Start keeps its intent.
 
         Return the chosen file so the detail screen can retain it after refresh.
@@ -813,6 +813,8 @@ class Application:
         and ``transition`` the Play next card still covering the screen
         (see _play_up_next). ``fresh`` says ``item`` was read from Silo for
         this very call, which saves reading a one-file title a second time.
+        ``party`` is a Watch Party binding (party_sync.RoomPlayback) and ``party_menu``
+        what Back opens during the party; see PlaybackController.play.
         """
         if not self.is_playable(item):
             return None
@@ -872,12 +874,16 @@ class Application:
             selected_item, selected_version, choice)
         controller.remember_audio = lambda choice: self.remember_audio_language(selected_item, selected_version, choice)
         controller.subtitle_ai_enabled = self.subtitle_ai_enabled
+        party_args = {}
+        if party is not None:
+            controller.party_menu = party_menu
+            party_args["party"] = party
         theme = getattr(self, "_theme", None)
         if theme is not None:
             theme.suspend()
         try:
             controller.play(selected_item, start_position=start_position, file_id=file_id, options=options,
-                            exact_start=start_at is not None, transition=transition)
+                            exact_start=start_at is not None, transition=transition, **party_args)
         finally:
             self._cache_playback_item(selected_item, file_id, getattr(controller, "last_result", None))
             action = getattr(controller, "next_action", None)
@@ -1169,6 +1175,8 @@ class Application:
         "subtitle_search": ("ui_subtitles", "search_subtitles"),
         "subtitle_translate": ("ui_subtitles", "translate_subtitles"),
         "subtitle_sync": ("ui_subtitles", "sync_subtitles"),
+        "watch_party": ("ui_party", "open_party"),
+        "host_party": ("ui_party", "host_party"),
     }
 
     def open_screen(self, screen, /, **kwargs):

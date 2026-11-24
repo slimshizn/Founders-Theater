@@ -456,6 +456,20 @@ class ApplicationFlowTests(unittest.TestCase):
         self.assertIs(player.return_value.play.call_args.args[0], episode)
         self.assertIsNone(self.app.play_next({"content_id": "series:1"}))
 
+    def test_a_watch_party_plays_the_rooms_file_from_the_rooms_position(self):
+        item = dict(movie_item(position=600), versions=movie_item(multiple=True)["versions"])
+        self.app.client.item.return_value = item
+        binding, menu = object(), (lambda: "leave")
+        with patch.object(application_module, "PlaybackController") as controller_class:
+            self.app.play(item, resume=False, file_id="file-b", start_at=42.0, auto_next=False,
+                          party=binding, party_menu=menu)
+        controller = controller_class.return_value
+        kwargs = controller.play.call_args.kwargs
+        self.assertIs(kwargs["party"], binding)
+        self.assertEqual((kwargs["file_id"], kwargs["start_position"]), ("file-b", 42.0))
+        self.assertIs(controller.party_menu, menu)
+        self.app.dialog.select.assert_not_called()  # No resume or file question in a room.
+
     def test_play_card_plays_a_cards_title_at_once_from_its_progress(self):
         episode = dict(movie_item(), content_id="episode:2", type="episode")
         self.app.client.item.return_value = episode

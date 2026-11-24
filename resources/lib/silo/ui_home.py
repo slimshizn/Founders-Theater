@@ -76,9 +76,9 @@ SECTION_LABELS = {"recommended": "Recommended", "browse": "Browse", "collections
 
 MENU, MENU_PANEL = 600, 601
 # Avatar menu in Android order.
-MENU_ORDER = (610, 613, 614, 615, 611, 616, 617, 612)
-MENU_ITEMS = {610: "profile", 613: "watchlist", 614: "favorites", 615: "history", 611: "settings",
-              616: "home_rows", 617: "server", 612: "logout"}
+MENU_ORDER = (610, 618, 613, 614, 615, 611, 616, 617, 612)
+MENU_ITEMS = {610: "profile", 618: "watch_party", 613: "watchlist", 614: "favorites", 615: "history",
+              611: "settings", 616: "home_rows", 617: "server", 612: "logout"}
 MENU_RESULTS = {610: "profile", 611: "settings", 617: "server", 612: "logout"}
 MENU_PERSONAL = {613: "watchlist", 614: "favorites", 615: "history"}
 MENU_ROW = 72
@@ -471,6 +471,9 @@ class HomeWindow(xbmcgui.WindowXML):
         elif control_id == 616:
             self.close_menu()
             self.edit_home_rows()
+        elif control_id == 618:
+            self.close_menu()
+            self.run_modal(lambda: self.application.open_screen("watch_party"), AVATAR)
 
     # ------------------------------------------------------------ home rows
 

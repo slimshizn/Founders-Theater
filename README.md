@@ -40,6 +40,11 @@
 - Lowers quality automatically when playback keeps buffering, and tests your connection speed.
 - Theme music on title pages.
 
+**Watch Party** (where your Silo server offers it)
+- Join a party with its code from the profile menu, wait in the lobby and say you're ready, and watch in step with everyone. The host's play, pause and seek reach you; Back offers Leave.
+- Host one from a title page (More → Watch Party): share the code, start it for everyone, choose whether guests may play and pause, return everyone to the lobby, or end it.
+- In a party everyone plays the room's file at normal speed, so Version, Speed and Up next are off.
+
 **Your profiles and this device**
 - Sign in with an activation code or your username and password.
 - Household profiles, including PIN-protected ones, and profile management.

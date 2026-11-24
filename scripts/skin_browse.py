@@ -320,7 +320,59 @@ def person_window():
                     SLOT_BASE + 4)
 
 
-WINDOWS = {"SiloBrowseRows.xml": rows_window, "SiloBrowseGrid.xml": grid_window, "SiloPerson.xml": person_window}
+def first_visible(direction, targets):
+    """Navigation to the first of ``targets`` that is visible, as skin_details does."""
+    return "".join('<{0} condition="Control.IsVisible({1})">{1}</{0}>'.format(direction, target)
+                   for target in targets)
+
+
+def party_window():
+    """The Watch Party lobby (ui_party.LobbyWindow): the title, the join code, who is here,
+    and the buttons, Ready or Start (200), who may play and pause (202), Leave or End (201)."""
+    backdrop = [
+        image(691, 0, 1229, 756, "$INFO[{}]".format(prop("silo.backdrop")), diffuse="mask_hero.png",
+              aspect="scale", fade=400, background=True, condition=has("silo.backdrop")),
+        image(0, 0, 1920, 1080, "white.png", color="B3000000"),
+    ]
+    text = [
+        label(88, 120, 1100, 40, "WATCH PARTY", "font12", SECONDARY),
+        label(88, 160, 1100, 72, "$INFO[{}]".format(prop("silo.title")), "font52_title", TEXT, scroll=True),
+        label(88, 232, 1100, 40, "$INFO[{}]".format(prop("silo.meta")), "font12", SECONDARY),
+        label(88, 288, 1100, 44, "$INFO[{}]".format(prop("silo.status")), "font27", TEXT),
+        label(1260, 120, 572, 40, "Join code", "font12", SECONDARY, "right"),
+        label(1260, 160, 572, 72, "$INFO[{}]".format(prop("silo.code")), "font52_title", TEXT, "right"),
+        label(88, 372, 900, 40, "$INFO[{}]".format(prop("silo.members_heading")), "font25_title", SECONDARY),
+    ]
+
+    def member(tag, focused):
+        parts = ['<{} width="900" height="64">'.format(tag)]
+        if focused:
+            parts.append(image(0, 4, 900, 56, "white.png", color="1FFFFFFF", condition="Control.HasFocus(300)"))
+        parts += [label(24, 0, 600, 64, "$INFO[ListItem.Label]", "font27", TEXT),
+                  label(624, 0, 252, 64, "$INFO[ListItem.Label2]", "font12", SECONDARY, "right"),
+                  "</{}>".format(tag)]
+        return "".join(parts)
+
+    members = ('<control type="list" id="300">' + rect(88, 420, 900, 576)
+               + "<orientation>vertical</orientation><onup>300</onup><ondown>300</ondown><onleft>300</onleft>"
+               + first_visible("onright", (200, 202, 201)) + member("itemlayout", False)
+               + member("focusedlayout", True) + "</control>")
+    buttons = [
+        button(200, 1260, 420, 572, 64, "$INFO[{}]".format(prop("silo.primary_label")),
+               navigation="<onup>200</onup>" + first_visible("ondown", (202, 201)) + "<onleft>300</onleft>"
+                          "<onright>200</onright>", condition=has("silo.primary_label")),
+        button(202, 1260, 500, 572, 64, "$INFO[{}]".format(prop("silo.policy_label")),
+               navigation=first_visible("onup", (200,)) + "<onup>202</onup><ondown>201</ondown><onleft>300</onleft>"
+                          "<onright>202</onright>", condition=has("silo.policy_label")),
+        button(201, 1260, 580, 572, 64, "$INFO[{}]".format(prop("silo.leave_label")),
+               navigation=first_visible("onup", (202, 200)) + "<onup>201</onup><ondown>201</ondown>"
+                          "<onleft>300</onleft><onright>201</onright>"),
+    ]
+    return document(backdrop + text + [members] + buttons + [top_bar()], 200)
+
+
+WINDOWS = {"SiloBrowseRows.xml": rows_window, "SiloBrowseGrid.xml": grid_window, "SiloPerson.xml": person_window,
+           "SiloParty.xml": party_window}
 
 
 def main():

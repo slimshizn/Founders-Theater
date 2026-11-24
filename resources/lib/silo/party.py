@@ -8,8 +8,8 @@ ticket, renewing the proof first when it nears expiry. ``room_closed`` and
 ``connection_replaced`` end the engagement for good, as does leaving.
 
 Lobby and player code read ``snapshot()``, take commands and send frames through
-``send()``; nothing here touches Kodi. See the Watch Party spec in the notes and
-Silo's docs/realtime-api.md for the protocol.
+``send()``; nothing here touches Kodi. Silo's docs/realtime-api.md and
+docs/architecture/watch-party-synchronization.md describe the protocol.
 """
 
 import json

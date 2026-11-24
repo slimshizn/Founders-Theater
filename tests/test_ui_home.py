@@ -333,8 +333,9 @@ class TopBarTests(unittest.TestCase):
         window = open_window(make_application(store={"temporary_session": True}))
         window.onClick(ui_home.AVATAR)
         window.getControl(610).setVisible.assert_called_with(False)
-        window.getControl(613).setPosition.assert_called_with(16, 16)
-        self.assertEqual(window.focus, 613)
+        window.getControl(618).setPosition.assert_called_with(16, 16)
+        window.getControl(613).setPosition.assert_called_with(16, 16 + 72)
+        self.assertEqual(window.focus, 618)
         window.onClick(610)
         self.assertIsNone(window.result)
         self.assertFalse(window.closed)
@@ -970,9 +971,16 @@ class ProfileMenuTests(unittest.TestCase):
     def test_menu_rows_follow_android_order(self):
         window = open_window()
         window.onClick(ui_home.AVATAR)
-        for index, control in enumerate((610, 613, 614, 615, 611, 616, 617, 612)):
+        for index, control in enumerate((610, 618, 613, 614, 615, 611, 616, 617, 612)):
             window.getControl(control).setPosition.assert_called_with(16, 16 + 72 * index)
-        window.getControl(ui_home.MENU_PANEL).setHeight.assert_called_with(32 + 72 * 8 - 8)
+        window.getControl(ui_home.MENU_PANEL).setHeight.assert_called_with(32 + 72 * 9 - 8)
+
+    def test_watch_party_opens_its_screen(self):
+        window = open_window()
+        window.onClick(ui_home.AVATAR)
+        window.onClick(618)
+        window.application.open_screen.assert_called_once_with("watch_party")
+        self.assertEqual(window.focus, ui_home.AVATAR)
 
     def test_switch_server_result(self):
         window = open_window()
@@ -1481,7 +1489,7 @@ class SkinTests(unittest.TestCase):
     def test_menu_rows_are_in_android_order(self):
         menu = next(control for control in self.tree.iter("control") if control.get("id") == "600")
         labels = [button.findtext("label") for button in menu.iter("control") if button.get("type") == "button"]
-        self.assertEqual(labels, ["Switch profile", "Watchlist", "Favorites", "History", "Settings",
+        self.assertEqual(labels, ["Switch profile", "Watch Party", "Watchlist", "Favorites", "History", "Settings",
                                   "Edit home rows", "Switch server", "Sign out"])
 
     def control(self, control_id):
