@@ -281,17 +281,20 @@ class SiloClient:
         return merged
 
     def request(self, method, path, body=None, authenticated=True, profile=True,
-                params=None, retry_auth=True):
+                params=None, retry_auth=True, headers=None):
         """Make one request, refreshing once on 401; never retry network errors.
 
         PIN verification opts out of the 401 replay as well as profile headers.
         This method does not open prompts or turn 403 responses into PIN retries.
+        ``headers`` adds request headers, such as a Watch Party room's X-Room-Token.
         """
         self._check_scope()
         method = method.upper()
+        extra = dict(headers or {})
         params = self._with_artwork(method, path, params)
         url = self._url(path, params)
         headers = self.headers(authenticated, profile)
+        headers.update(extra)
         self._check_scope()
         if body is not None:
             headers["Content-Type"] = "application/json"
@@ -300,7 +303,7 @@ class SiloClient:
         self._check_scope()
         if status == 401 and authenticated and retry_auth and self.store.get("refresh_token"):
             self.refresh_if_current(headers)
-            return self.request(method, path, body, authenticated, profile, params, retry_auth=False)
+            return self.request(method, path, body, authenticated, profile, params, retry_auth=False, headers=extra)
         if not 200 <= status < 300:
             problem = data if isinstance(data, dict) else {}
             code = str(problem.get("type", "")).rstrip("/").rsplit("/", 1)[-1]

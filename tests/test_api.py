@@ -144,6 +144,14 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(transport.calls[2][2]["Authorization"], "Bearer new-access")
         self.assertEqual(transport.calls[2][2]["X-Profile-Id"], "p1")
 
+    def test_extra_headers_ride_the_request_and_its_refresh_retry(self):
+        # A Watch Party room proof travels as X-Room-Token on room calls.
+        transport = Transport(response({}, 401), response(tokens()), response({"room": {}}))
+        self.client(transport).request("GET", "/watch-together/rooms/r1", headers={"X-Room-Token": "eyJ.room"})
+        self.assertEqual(transport.calls[0][2]["X-Room-Token"], "eyJ.room")
+        self.assertEqual(transport.calls[2][2]["X-Room-Token"], "eyJ.room")
+        self.assertEqual(transport.calls[2][2]["Authorization"], "Bearer new-access")
+
     def test_second_401_is_not_retried(self):
         transport = Transport(response({}, 401), response(tokens()), response({}, 401))
         with self.assertRaises(ApiError) as error:
