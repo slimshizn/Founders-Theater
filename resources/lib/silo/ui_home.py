@@ -75,12 +75,10 @@ PANEL_TOP, PANEL_ROW, LIB_WIDTH, FLYOUT_WIDTH, PANEL_GAP, FOR_YOU_WIDTH = 128, 7
 SECTION_LABELS = {"recommended": "Recommended", "browse": "Browse", "collections": "Collections"}
 
 MENU, MENU_PANEL = 600, 601
-# Avatar menu in Android order.
-MENU_ORDER = (610, 618, 613, 614, 615, 611, 616, 617, 612)
-MENU_ITEMS = {610: "profile", 618: "watch_party", 613: "watchlist", 614: "favorites", 615: "history",
-              611: "settings", 616: "home_rows", 617: "server", 612: "logout"}
+# Avatar menu in Android order. Watchlist, Favorites and History are under For You, not here too.
+MENU_ORDER = (610, 618, 611, 616, 617, 612)
+MENU_ITEMS = {610: "profile", 618: "watch_party", 611: "settings", 616: "home_rows", 617: "server", 612: "logout"}
 MENU_RESULTS = {610: "profile", 611: "settings", 617: "server", 612: "logout"}
-MENU_PERSONAL = {613: "watchlist", 614: "favorites", 615: "history"}
 MENU_ROW = 72
 
 HOME_ROWS_KEY = "home_rows"
@@ -464,10 +462,6 @@ class HomeWindow(xbmcgui.WindowXML):
         if control_id in MENU_RESULTS:
             self.result = MENU_RESULTS[control_id]
             self.close()
-        elif control_id in MENU_PERSONAL:
-            self.close_menu()
-            kind = MENU_PERSONAL[control_id]
-            self.run_modal(lambda: self.application.open_screen("personal", kind=kind), AVATAR)
         elif control_id == 616:
             self.close_menu()
             self.edit_home_rows()

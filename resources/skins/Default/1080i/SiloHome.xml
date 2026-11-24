@@ -6804,13 +6804,13 @@
       <left>1352</left>
       <top>128</top>
       <width>480</width>
-      <height>672</height>
+      <height>456</height>
       <visible>!String.IsEmpty(Window.Property(silo.menu))</visible>
       <control type="image" id="601">
         <left>0</left>
         <top>0</top>
         <width>480</width>
-        <height>672</height>
+        <height>456</height>
         <texture border="24">panel.png</texture>
       </control>
       <control type="button" id="610">
@@ -6848,70 +6848,13 @@
         <texturefocus colordiffuse="FFEDEDED" border="16">round16.png</texturefocus>
         <texturenofocus/>
         <onup>610</onup>
-        <ondown>613</ondown>
+        <ondown>611</ondown>
         <onleft>618</onleft>
         <onright>618</onright>
       </control>
-      <control type="button" id="613">
-        <left>16</left>
-        <top>160</top>
-        <width>448</width>
-        <height>64</height>
-        <label>Watchlist</label>
-        <font>font25_title</font>
-        <textcolor>FFEDEDED</textcolor>
-        <focusedcolor>FF000000</focusedcolor>
-        <align>left</align>
-        <aligny>center</aligny>
-        <textoffsetx>24</textoffsetx>
-        <texturefocus colordiffuse="FFEDEDED" border="16">round16.png</texturefocus>
-        <texturenofocus/>
-        <onup>618</onup>
-        <ondown>614</ondown>
-        <onleft>613</onleft>
-        <onright>613</onright>
-      </control>
-      <control type="button" id="614">
-        <left>16</left>
-        <top>232</top>
-        <width>448</width>
-        <height>64</height>
-        <label>Favorites</label>
-        <font>font25_title</font>
-        <textcolor>FFEDEDED</textcolor>
-        <focusedcolor>FF000000</focusedcolor>
-        <align>left</align>
-        <aligny>center</aligny>
-        <textoffsetx>24</textoffsetx>
-        <texturefocus colordiffuse="FFEDEDED" border="16">round16.png</texturefocus>
-        <texturenofocus/>
-        <onup>613</onup>
-        <ondown>615</ondown>
-        <onleft>614</onleft>
-        <onright>614</onright>
-      </control>
-      <control type="button" id="615">
-        <left>16</left>
-        <top>304</top>
-        <width>448</width>
-        <height>64</height>
-        <label>History</label>
-        <font>font25_title</font>
-        <textcolor>FFEDEDED</textcolor>
-        <focusedcolor>FF000000</focusedcolor>
-        <align>left</align>
-        <aligny>center</aligny>
-        <textoffsetx>24</textoffsetx>
-        <texturefocus colordiffuse="FFEDEDED" border="16">round16.png</texturefocus>
-        <texturenofocus/>
-        <onup>614</onup>
-        <ondown>611</ondown>
-        <onleft>615</onleft>
-        <onright>615</onright>
-      </control>
       <control type="button" id="611">
         <left>16</left>
-        <top>376</top>
+        <top>160</top>
         <width>448</width>
         <height>64</height>
         <label>Settings</label>
@@ -6923,14 +6866,14 @@
         <textoffsetx>24</textoffsetx>
         <texturefocus colordiffuse="FFEDEDED" border="16">round16.png</texturefocus>
         <texturenofocus/>
-        <onup>615</onup>
+        <onup>618</onup>
         <ondown>616</ondown>
         <onleft>611</onleft>
         <onright>611</onright>
       </control>
       <control type="button" id="616">
         <left>16</left>
-        <top>448</top>
+        <top>232</top>
         <width>448</width>
         <height>64</height>
         <label>Edit home rows</label>
@@ -6949,7 +6892,7 @@
       </control>
       <control type="button" id="617">
         <left>16</left>
-        <top>520</top>
+        <top>304</top>
         <width>448</width>
         <height>64</height>
         <label>Switch server</label>
@@ -6968,7 +6911,7 @@
       </control>
       <control type="button" id="612">
         <left>16</left>
-        <top>592</top>
+        <top>376</top>
         <width>448</width>
         <height>64</height>
         <label>Sign out</label>

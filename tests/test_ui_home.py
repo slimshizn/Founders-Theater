@@ -334,7 +334,7 @@ class TopBarTests(unittest.TestCase):
         window.onClick(ui_home.AVATAR)
         window.getControl(610).setVisible.assert_called_with(False)
         window.getControl(618).setPosition.assert_called_with(16, 16)
-        window.getControl(613).setPosition.assert_called_with(16, 16 + 72)
+        window.getControl(611).setPosition.assert_called_with(16, 16 + 72)
         self.assertEqual(window.focus, 618)
         window.onClick(610)
         self.assertIsNone(window.result)
@@ -971,9 +971,9 @@ class ProfileMenuTests(unittest.TestCase):
     def test_menu_rows_follow_android_order(self):
         window = open_window()
         window.onClick(ui_home.AVATAR)
-        for index, control in enumerate((610, 618, 613, 614, 615, 611, 616, 617, 612)):
+        for index, control in enumerate((610, 618, 611, 616, 617, 612)):
             window.getControl(control).setPosition.assert_called_with(16, 16 + 72 * index)
-        window.getControl(ui_home.MENU_PANEL).setHeight.assert_called_with(32 + 72 * 9 - 8)
+        window.getControl(ui_home.MENU_PANEL).setHeight.assert_called_with(32 + 72 * 6 - 8)
 
     def test_watch_party_opens_its_screen(self):
         window = open_window()
@@ -989,15 +989,17 @@ class ProfileMenuTests(unittest.TestCase):
         self.assertEqual(window.result, "server")
         self.assertTrue(window.closed)
 
-    def test_personal_lists_open_their_screen(self):
-        for control_id, kind in ((613, "watchlist"), (614, "favorites"), (615, "history")):
+    def test_personal_lists_live_under_for_you_only(self):
+        """Watchlist, Favorites and History are in the For You menu, not again in the profile menu."""
+        self.assertEqual(sorted(ui_home.FOR_YOU_ITEMS.values()), ["favorites", "for_you", "history", "watchlist"])
+        self.assertFalse({"watchlist", "favorites", "history"} & set(ui_home.MENU_ITEMS.values()))
+        skin = (SKIN / "1080i/SiloHome.xml").read_text(encoding="utf-8")
+        for control_id in (613, 614, 615):
+            self.assertNotIn('id="{}"'.format(control_id), skin)
             window = open_window()
             window.onClick(ui_home.AVATAR)
             window.onClick(control_id)
-            window.application.open_screen.assert_called_once_with("personal", kind=kind)
-            self.assertFalse(window.menu_open)
-            self.assertFalse(window.closed)
-            self.assertEqual(window.focus, ui_home.AVATAR)
+            window.application.open_screen.assert_not_called()
 
 
 class HomeRowEditorTests(unittest.TestCase):
@@ -1489,8 +1491,8 @@ class SkinTests(unittest.TestCase):
     def test_menu_rows_are_in_android_order(self):
         menu = next(control for control in self.tree.iter("control") if control.get("id") == "600")
         labels = [button.findtext("label") for button in menu.iter("control") if button.get("type") == "button"]
-        self.assertEqual(labels, ["Switch profile", "Watch Party", "Watchlist", "Favorites", "History", "Settings",
-                                  "Edit home rows", "Switch server", "Sign out"])
+        self.assertEqual(labels, ["Switch profile", "Watch Party", "Settings", "Edit home rows", "Switch server",
+                                  "Sign out"])
 
     def control(self, control_id):
         return next(control for control in self.tree.iter("control") if control.get("id") == str(control_id))
